@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "447744204786",
+    "project_id": "ferma-d4351",
+    "storage_bucket": "ferma-d4351.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:447744204786:android:263cbdd7875d319cd2556b",
+        "android_client_info": {
+          "package_name": "com.example.ferma_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "447744204786-ermlavnruuu0r5bi37t7akc7blsr68mg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ferma_app",
+            "certificate_hash": "ebdb89b4abd07635a9346e45231b0afdfa8d2c46"
+          }
+        },
+        {
+          "client_id": "447744204786-hmfnjukga75410o1153i8hc5o9dp0nqr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCoHWXukPWNk_tsqMa4oU1pGdGr4kAC0uU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "447744204786-hmfnjukga75410o1153i8hc5o9dp0nqr.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "447744204786-a7fqaeovg722ehoajhb0622jsgdo0kaa.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.fermaApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

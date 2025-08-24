@@ -1,0 +1,150 @@
+name: ferma_app
+description: Professional tovuq fermasi boshqaruv ilovasi
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Firebase Core Services
+  firebase_core: ^4.0.0
+  firebase_auth: ^6.0.1
+  cloud_firestore: ^6.0.0
+  firebase_messaging: ^16.0.0
+  firebase_analytics: ^12.0.0
+  firebase_crashlytics: ^5.0.0
+  firebase_performance: ^0.11.0
+  
+  # Authentication
+  google_sign_in: ^7.1.1
+  local_auth: ^2.1.6
+  flutter_secure_storage: ^10.0.0-beta.4
+  
+  # Local Database & Storage
+  sqflite: ^2.3.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.1
+  
+  # State Management
+  provider: ^6.0.5
+  riverpod: ^2.3.6
+  flutter_riverpod: ^2.3.6
+  
+  # UI & Animation
+  flutter_svg: ^2.0.7
+  lottie: ^3.3.0
+  font_awesome_flutter: ^10.5.0
+  google_fonts: ^6.3.0
+  flutter_staggered_animations: ^1.1.1
+  shimmer: ^3.0.0
+  smooth_page_indicator: ^1.1.0
+  
+  # Charts & Visualization
+  fl_chart: ^1.0.0
+  syncfusion_flutter_charts: ^30.2.6+1
+  
+  # Notifications
+  flutter_local_notifications: ^19.4.0
+  workmanager: ^0.9.0+2
+  timezone: ^0.10.1
+  
+  # Voice & Audio
+  speech_to_text: ^7.3.0
+  flutter_tts: ^4.2.3
+  
+  # Connectivity & Network
+  connectivity_plus: ^6.1.5
+  dio: ^5.3.2
+  internet_connection_checker: ^3.0.1
+  
+  # Device & System Info
+  device_info_plus: ^11.5.0
+  package_info_plus: ^8.3.1
+  battery_plus: ^6.2.3
+  
+  # File Handling & Export
+  excel: ^4.0.6
+  csv: ^6.0.0
+  pdf: ^3.10.4
+  printing: ^5.11.0
+  open_file: ^3.3.2
+  
+  # Sharing & External
+  share_plus: ^11.1.0
+  url_launcher: ^6.1.12
+  
+  # Permissions
+  permission_handler: ^12.0.1
+  
+  # Google Services Integration
+  googleapis: ^14.0.0
+  googleapis_auth: ^2.0.0
+  google_polyline_algorithm: ^3.1.0
+  
+  # QR Code
+  qr_flutter: ^4.1.0
+  camera: ^0.11.2
+  
+  # Image & Camera
+  image_picker: ^1.0.4
+  image_cropper: ^9.1.0
+  cached_network_image: ^3.2.3
+  
+  # Date & Time
+  intl: ^0.20.2
+  jiffy: ^6.2.1
+  
+  # Utilities
+  crypto: ^3.0.3
+  uuid: ^4.5.1
+  collection: ^1.17.2
+  rxdart: ^0.28.0
+  
+  # Performance
+  flutter_native_splash: ^2.3.2
+  flutter_launcher_icons: ^0.14.4
+  shared_preferences: ^2.5.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  
+  # Code Generation
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.6
+  json_annotation: ^4.8.1
+  json_serializable: ^6.7.1
+  
+  # Testing
+  mockito: ^5.4.2
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  
+  # Assets section is temporarily disabled because the directories do not exist.
+  # Uncomment and ensure the folders/files exist before enabling.
+  # assets:
+  #   - assets/icons/
+  #   - assets/images/
+  #   - assets/animations/
+  #   - assets/sounds/
+  
+  # Fonts configuration - uncomment and add your font files when ready
+  # fonts:
+  #   - family: YourFontFamily
+  #     fonts:
+  #       - asset: assets/fonts/your_font_file.ttf
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+
