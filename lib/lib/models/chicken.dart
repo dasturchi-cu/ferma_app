@@ -1,16 +1,16 @@
 import 'package:hive/hive.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
 
-part 'chicken.g.dart';
 
 DateTime _parseDate(dynamic v) {
   if (v == null) return DateTime.now();
-  if (v is Timestamp) return v.toDate();
   if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
   if (v is String) {
     final asInt = int.tryParse(v);
     if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
-    try { return DateTime.parse(v); } catch (_) {}
+    try {
+      return DateTime.parse(v);
+    } catch (_) {}
   }
   return DateTime.now();
 }
@@ -38,9 +38,9 @@ class Chicken extends HiveObject {
     List<ChickenDeath>? deaths,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : deaths = deaths ?? [],
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : deaths = deaths ?? [],
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   // Joriy tovuqlar sonini hisoblash
   int get currentCount {
@@ -52,9 +52,12 @@ class Chicken extends HiveObject {
   int get todayDeaths {
     DateTime today = DateTime.now();
     return deaths
-        .where((death) => death.date.year == today.year &&
-            death.date.month == today.month &&
-            death.date.day == today.day)
+        .where(
+          (death) =>
+              death.date.year == today.year &&
+              death.date.month == today.month &&
+              death.date.day == today.day,
+        )
         .fold(0, (sum, death) => sum + death.count);
   }
 
@@ -84,40 +87,45 @@ class Chicken extends HiveObject {
     int mostCount = daily[mostDay] ?? 0;
     int leastCount = daily[leastDay] ?? 0;
     daily.forEach((day, count) {
-      if (count > mostCount) { mostDay = day; mostCount = count; }
-      if (count < leastCount) { leastDay = day; leastCount = count; }
+      if (count > mostCount) {
+        mostDay = day;
+        mostCount = count;
+      }
+      if (count < leastCount) {
+        leastDay = day;
+        leastCount = count;
+      }
     });
 
     return {
       'totalDeaths': totalDeaths,
-      'mostDeathsDay': {
-        'date': mostDay,
-        'count': mostCount,
-      },
-      'leastDeathsDay': {
-        'date': leastDay,
-        'count': leastCount,
-      },
+      'mostDeathsDay': {'date': mostDay, 'count': mostCount},
+      'leastDeathsDay': {'date': leastDay, 'count': leastCount},
       'averageDeaths': averageDeaths,
     };
   }
 
   // O'lim qo'shish
   void addDeath(int count) {
-    deaths.add(ChickenDeath(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      count: count,
-      date: DateTime.now(),
-    ));
+    deaths.add(
+      ChickenDeath(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        count: count,
+        date: DateTime.now(),
+      ),
+    );
     updatedAt = DateTime.now();
   }
 
   // O'limni o'chirish (faqat bugungi)
   void removeTodayDeath() {
     DateTime today = DateTime.now();
-    deaths.removeWhere((death) => death.date.year == today.year &&
-        death.date.month == today.month &&
-        death.date.day == today.day);
+    deaths.removeWhere(
+      (death) =>
+          death.date.year == today.year &&
+          death.date.month == today.month &&
+          death.date.day == today.day,
+    );
     updatedAt = DateTime.now();
   }
 
@@ -137,9 +145,12 @@ class Chicken extends HiveObject {
     return Chicken(
       id: json['id'] as String? ?? '',
       totalCount: json['totalCount'] as int? ?? 0,
-      deaths: (json['deaths'] as List<dynamic>?)
-          ?.map((death) => ChickenDeath.fromJson(death as Map<String, dynamic>))
-          .toList() ??
+      deaths:
+          (json['deaths'] as List<dynamic>?)
+              ?.map(
+                (death) => ChickenDeath.fromJson(death as Map<String, dynamic>),
+              )
+              .toList() ??
           [],
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
@@ -187,4 +198,4 @@ class ChickenDeath extends HiveObject {
       note: json['note'] as String?,
     );
   }
-} 
+}
