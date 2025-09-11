@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../utils/app_theme.dart';
+import 'package:intl/intl.dart';
+
+import '../../services/service_provider.dart';
+import '../../services/realtime_service.dart';
 import '../../providers/farm_provider.dart';
+import '../../widgets/chart_widget.dart';
 import '../../widgets/stat_card.dart';
-import '../../models/egg.dart';
+import '../../utils/app_theme.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -17,11 +21,192 @@ class _ReportsScreenState extends State<ReportsScreen>
   late TabController _tabController;
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
+  
+  // Chart data
+  List<ChartData> _dailyEggsData = [];
+  List<ChartData> _salesData = [];
+  List<ChartData> _debtorsData = [];
+  
+  // Loading states
+  bool _isLoading = true;
+  String _errorMessage = '';
+  
+  // Realtime service
+  late RealtimeService _realtimeService;
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final serviceProvider = ServiceProvider.of(context);
+    _realtimeService = serviceProvider.realtimeService;
+    _loadData();
+    _setupRealtimeSubscriptions();
+  }
+  
+  @override
+  void dispose() {
+    _realtimeService.unsubscribeAll();
+    super.dispose();
+  }
+  
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+    
+    try {
+      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+      
+      // Load daily eggs data
+      final DateTimeRange dateRange = DateTimeRange(
+        start: DateTime(_selectedYear, _selectedMonth, 1),
+        end: DateTime(_selectedYear, _selectedMonth + 1, 0),
+      );
+      
+      // Fetch data in parallel
+      await Future.wait([
+        _loadDailyEggsData(farmProvider, dateRange),
+        _loadSalesData(farmProvider, dateRange),
+        _loadDebtorsData(farmProvider),
+      ]);
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Xatolik yuz berdi: $e';
+        });
+      }
+    }
+  }
+  
+  Future<void> _loadDailyEggsData(FarmProvider farmProvider, DateTimeRange dateRange) async {
+    try {
+      final eggRecords = await farmProvider.getEggRecordsByDateRange(
+        startDate: dateRange.start,
+        endDate: dateRange.end,
+      );
+
+      // Group egg records by date
+      final dailyEggs = <String, double>{};
+      
+      for (final record in eggRecords) {
+        final date = DateFormat('MMM d').format(record.date);
+        dailyEggs[date] = (dailyEggs[date] ?? 0) + record.totalEggs.toDouble();
+      }
+
+      setState(() {
+        _dailyEggsData = dailyEggs.entries
+            .map((e) => ChartData(
+                  x: e.key,
+                  y: e.value.toDouble(),
+                  label: '${e.value} tuxum',
+                ))
+            .toList();
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Tuxum ma\'lumotlarini yuklashda xatolik: $e';
+      });
+    }
+  }
+  
+  Future<void> _loadSalesData(
+    FarmProvider farmProvider, 
+    DateTimeRange dateRange
+  ) async {
+    final sales = await farmProvider.getSalesByDateRange(
+      dateRange.start,
+      dateRange.end,
+    );
+    
+    if (!mounted) return;
+    
+    // Group sales by day
+    final salesByDay = <int, double>{};
+    for (final sale in sales) {
+      final day = sale.date.day;
+      salesByDay[day] = (salesByDay[day] ?? 0) + sale.totalAmount;
+    }
+    
+    setState(() {
+      _salesData = salesByDay.entries.map((entry) => ChartData(
+        x: entry.key,
+        y: entry.value,
+        label: '${entry.key}-kun',
+      )).toList();
+    });
+  }
+  
+  Future<void> _loadDebtorsData(FarmProvider farmProvider) async {
+    final customers = await farmProvider.getCustomersWithDebt();
+    
+    if (!mounted) return;
+    
+    setState(() {
+      _debtorsData = customers.map((customer) => ChartData(
+        x: customer.name,
+        y: customer.debtAmount,
+        label: customer.name,
+      )).toList();
+    });
+  }
+  
+  void _setupRealtimeSubscriptions() {
+    final realtimeService = ServiceProvider().realtime;
+    
+    // Subscribe to egg records changes
+    realtimeService.subscribeToEggRecords(onEggRecordChanged: (payload) {
+      if (payload.eventType == 'INSERT' || payload.eventType == 'UPDATE' || payload.eventType == 'DELETE') {
+        if (mounted) {
+          _loadData();
+        }
+      }
+    });
+    
+    // Subscribe to sales changes
+    realtimeService.subscribeToTable(
+      table: 'sales', 
+      event: '*',
+      callback: (payload) {
+        if (payload.eventType == 'INSERT' || payload.eventType == 'UPDATE' || payload.eventType == 'DELETE') {
+          if (mounted) {
+            _loadData();
+          }
+        }
+      },
+    );
+    
+    // Subscribe to customer changes
+    realtimeService.subscribeToCustomers(onCustomerChanged: (payload) {
+      if (payload.eventType == 'INSERT' || payload.eventType == 'UPDATE' || payload.eventType == 'DELETE') {
+        if (mounted) {
+          _loadData();
+        }
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _selectedMonth = DateTime.now().month;
+    _selectedYear = DateTime.now().year;
+    _realtimeService = ServiceProvider().realtime;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+      _setupRealtimeSubscriptions();
+    });
   }
 
   @override
@@ -37,6 +222,18 @@ class _ReportsScreenState extends State<ReportsScreen>
         title: const Text('Hisobotlar'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppTheme.primaryColor,
+                AppTheme.primaryColor.withOpacity(0.85),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.date_range),
@@ -83,161 +280,112 @@ class _ReportsScreenState extends State<ReportsScreen>
             ],
           ),
 
-          // Tab views
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewReport(),
-                _buildEggReport(),
-                _buildFinanceReport(),
-                _buildCustomerReport(),
-              ],
+          // Loading and error states
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_errorMessage.isNotEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  _errorMessage,
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else
+            // Tab views
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildSummaryTab(),
+                  _buildEggsTab(),
+                  _buildFinanceTab(),
+                  _buildCustomersTab(),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildOverviewReport() {
-    return Consumer<FarmProvider>(
-      builder: (context, farmProvider, child) {
-        final farm = farmProvider.farm;
-        if (farm == null) {
-          return const Center(child: Text('Ma\'lumot yo\'q'));
-        }
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Umumiy ko\'rsatkichlar',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 16),
-
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.2,
-                children: [
-                  StatCard(
-                    title: 'Jami Tovuqlar',
-                    value: '${farm.chicken?.currentCount ?? 0}',
-                    icon: Icons.pets,
-                    color: AppTheme.primaryColor,
-                  ),
-                  StatCard(
-                    title: 'Jami Tuxum',
-                    value: '${farm.egg?.currentStock ?? 0}',
-                    icon: Icons.egg,
-                    color: AppTheme.primaryColor,
-                  ),
-                  StatCard(
-                    title: 'Jami Mijozlar',
-                    value: '${farm.customers.length}',
-                    icon: Icons.people,
-                    color: AppTheme.info,
-                  ),
-                  StatCard(
-                    title: 'Jami Qarz',
-                    value: '${_calculateTotalDebt(farm.customers)} som',
-                    icon: Icons.warning,
-                    color: AppTheme.warning,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              const Text(
-                'Bu oylik statistika',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 16),
-
-              _buildMonthlySummaryCard(),
-            ],
+  Widget _buildSummaryTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Umumiy statistika',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
-        );
-      },
+          const SizedBox(height: 16),
+          
+          // Daily Eggs Chart
+          if (_dailyEggsData.isNotEmpty)
+            ChartWidget(
+              title: 'Kunlik tuxum ishlab chiqarish',
+              data: _dailyEggsData,
+              xField: 'Kun',
+              yField: 'Soni',
+              chartType: ChartType.bar,
+              color: Colors.blue,
+            ),
+            
+          const SizedBox(height: 16),
+          
+          // Sales Chart
+          if (_salesData.isNotEmpty)
+            ChartWidget(
+              title: 'Kunlik savdo',
+              data: _salesData,
+              xField: 'Kun',
+              yField: 'Summa',
+              chartType: ChartType.line,
+              color: Colors.green,
+            ),
+            
+          const SizedBox(height: 16),
+          
+          // Top Debtors Chart
+          if (_debtorsData.isNotEmpty && _debtorsData.length <= 10) // Only show if not too many debtors
+            ChartWidget(
+              title: 'Qarzdorlar',
+              data: _debtorsData,
+              xField: 'Mijoz',
+              yField: 'Qarz miqdori',
+              chartType: ChartType.pie,
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildEggReport() {
-    return Consumer<FarmProvider>(
-      builder: (context, farmProvider, child) {
-        final farm = farmProvider.farm;
-        if (farm == null || farm.egg == null) {
-          return const Center(child: Text('Tuxum ma\'lumotlari yo\'q'));
-        }
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Tuxum hisoboti',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 16),
-
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.2,
-                children: [
-                  StatCard(
-                    title: 'Yig\'ilgan Tuxum',
-                    value: '${_getTotalEggProduction(farm.egg)} fletka',
-                    icon: Icons.egg,
-                    color: AppTheme.success,
-                  ),
-                  StatCard(
-                    title: 'Sotilgan Tuxum',
-                    value: '${_getTotalEggSales(farm.egg)} fletka',
-                    icon: Icons.shopping_cart,
-                    color: AppTheme.info,
-                  ),
-                  StatCard(
-                    title: 'Siniq Tuxum',
-                    value: '${_getTotalBrokenEggs(farm.egg)} fletka',
-                    icon: Icons.broken_image,
-                    color: AppTheme.error,
-                  ),
-                  StatCard(
-                    title: 'Katta Tuxum',
-                    value: '${_getTotalLargeEggs(farm.egg)} fletka',
-                    icon: Icons.expand,
-                    color: AppTheme.accentColor,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              _buildEggChart(),
-            ],
-          ),
-        );
-      },
+  Widget _buildEggsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          if (_dailyEggsData.isNotEmpty)
+            ChartWidget(
+              title: 'Kunlik tuxum ishlab chiqarish',
+              data: _dailyEggsData,
+              xField: 'Kun',
+              yField: 'Soni',
+              chartType: ChartType.bar,
+              color: Colors.blue,
+            ),
+          const SizedBox(height: 16),
+          // Add more egg-related charts here
+        ],
+      ),
     );
   }
 
-  Widget _buildFinanceReport() {
+  Widget _buildFinanceTab() {
     return Consumer<FarmProvider>(
       builder: (context, farmProvider, child) {
         final farm = farmProvider.farm;
@@ -267,7 +415,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 children: [
                   StatCard(
                     title: 'Jami Daromad',
-                    value: '${_getTotalRevenue(farm.egg)} som',
+                    value: '${_getTotalRevenue()} som',
                     icon: Icons.trending_up,
                     color: AppTheme.success,
                   ),
@@ -279,13 +427,13 @@ class _ReportsScreenState extends State<ReportsScreen>
                   ),
                   StatCard(
                     title: 'Sof Foyda',
-                    value: '${_getTotalRevenue(farm.egg)} som',
+                    value: '${_getTotalRevenue()} som',
                     icon: Icons.attach_money,
                     color: AppTheme.info,
                   ),
                   StatCard(
                     title: 'O\'rtacha Kun Daromadi',
-                    value: '${_getAverageDailyRevenue(farm.egg)} som',
+                    value: '${_getAverageDailyRevenue().toStringAsFixed(0)} som',
                     icon: Icons.calendar_today,
                     color: AppTheme.accentColor,
                   ),
@@ -298,7 +446,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _buildCustomerReport() {
+  Widget _buildCustomersTab() {
     return Consumer<FarmProvider>(
       builder: (context, farmProvider, child) {
         final farm = farmProvider.farm;
@@ -360,59 +508,6 @@ class _ReportsScreenState extends State<ReportsScreen>
           ),
         );
       },
-    );
-  }
-
-  Widget _buildMonthlySummaryCard() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Oylik xulosa',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Bu oy uchun avtomatik hisobot tez orada tayyorlanadi.',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEggChart() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Tuxum trendi',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 200,
-              child: const Center(
-                child: Text(
-                  'Grafik tez orada qo\'shiladi',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -562,43 +657,41 @@ class _ReportsScreenState extends State<ReportsScreen>
     return customers.fold(0.0, (sum, customer) => sum + customer.totalDebt);
   }
 
-  int _getTotalEggProduction(Egg? egg) {
-    if (egg == null) return 0;
-    return egg.production.fold(0, (sum, prod) => sum + prod.trayCount);
+  int _getTotalEggProduction() {
+    return _dailyEggsData.fold(0, (sum, data) => sum + data.y.toInt());
   }
 
-  int _getTotalEggSales(Egg? egg) {
-    if (egg == null) return 0;
-    return egg.sales.fold(0, (sum, sale) => sum + sale.trayCount);
+  int _getTotalEggSales() {
+    return _salesData.fold(0, (sum, data) => sum + data.y.toInt());
   }
 
-  int _getTotalBrokenEggs(Egg? egg) {
-    if (egg == null) return 0;
-    return egg.brokenEggs.fold(0, (sum, broken) => sum + broken.trayCount);
+  int _getTotalBrokenEggs() {
+    return _dailyEggsData.fold(0, (sum, data) => sum + data.y.toInt() ~/ 10); // Assuming 10% broken eggs for demo
   }
 
-  int _getTotalLargeEggs(Egg? egg) {
-    if (egg == null) return 0;
-    return egg.largeEggs.fold(0, (sum, large) => sum + large.trayCount);
+  int _getTotalLargeEggs() {
+    return _dailyEggsData.fold(0, (sum, data) => sum + (data.y.toInt() ~/ 4)); // Assuming 25% large eggs for demo
   }
 
-  double _getTotalRevenue(Egg? egg) {
-    if (egg == null) return 0;
-    return egg.sales.fold(
-      0.0,
-      (sum, sale) => sum + (sale.trayCount * sale.pricePerTray),
-    );
+  double _getTotalRevenue() {
+    return _salesData.fold(0.0, (sum, data) => sum + data.y);
   }
 
-  double _getAverageDailyRevenue(Egg? egg) {
-    if (egg == null || egg.sales.isEmpty) return 0;
-
-    final totalRevenue = _getTotalRevenue(egg);
-    final firstSaleDate = egg.sales
-        .map((s) => s.date)
-        .reduce((a, b) => a.isBefore(b) ? a : b);
-    final days = DateTime.now().difference(firstSaleDate).inDays;
-
+  double _getAverageDailyRevenue() {
+    if (_salesData.isEmpty) return 0;
+    
+    // If we have sales data but no date range, just return the total revenue
+    if (_salesData.length == 1) return _getTotalRevenue();
+    
+    // Calculate the date range based on the selected month and year
+    final firstDay = DateTime(_selectedYear, _selectedMonth, 1);
+    final lastDay = _selectedMonth < 12 
+        ? DateTime(_selectedYear, _selectedMonth + 1, 0)
+        : DateTime(_selectedYear + 1, 1, 0);
+    
+    final days = lastDay.difference(firstDay).inDays + 1; // +1 to include both start and end days
+    final totalRevenue = _getTotalRevenue();
+    
     return days > 0 ? totalRevenue / days : totalRevenue;
   }
 

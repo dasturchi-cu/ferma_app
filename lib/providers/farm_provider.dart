@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/farm.dart';
-import '../models/chicken.dart';
-import '../models/egg.dart';
-import '../models/customer.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../config/supabase_config.dart';
@@ -16,6 +14,7 @@ class FarmProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isOfflineMode = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _farmStreamSub;
 
   // Getters
   Farm? get farm => _farm;
@@ -27,6 +26,35 @@ class FarmProvider with ChangeNotifier {
   void setFarm(Farm farm) {
     _farm = farm;
     notifyListeners();
+  }
+
+  // Start realtime streaming for current farm row
+  Future<void> startRealtime() async {
+    if (_farm == null) return;
+    await stopRealtime();
+    try {
+      _farmStreamSub = _supabase
+          .from('farms')
+          .stream(primaryKey: ['id'])
+          .eq('id', _farm!.id)
+          .listen((rows) async {
+            if (rows.isNotEmpty) {
+              final updated = Farm.fromJson(rows.first);
+              _farm = updated;
+              // keep offline in sync
+              await _saveToHive();
+              notifyListeners();
+            }
+          });
+    } catch (e) {
+      _error = 'Realtime ulanishda xatolik: $e';
+      notifyListeners();
+    }
+  }
+
+  Future<void> stopRealtime() async {
+    await _farmStreamSub?.cancel();
+    _farmStreamSub = null;
   }
 
   // Tovuqlar qo'shish
@@ -512,7 +540,7 @@ class FarmProvider with ChangeNotifier {
     }
   }
 
-// Supabase'ga saqlash
+  // Supabase'ga saqlash
   Future<void> _saveToSupabase() async {
     if (_farm == null) return;
 
@@ -562,5 +590,11 @@ class FarmProvider with ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _farmStreamSub?.cancel();
+    super.dispose();
   }
 }

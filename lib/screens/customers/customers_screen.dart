@@ -35,8 +35,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppConstants.accentColor,
-                      AppConstants.accentColor.withOpacity(0.8),
+                      AppConstants.primaryColor,
+                      AppConstants.primaryColor.withOpacity(0.85),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -94,8 +94,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 child: customers.isEmpty
                     ? _buildEmptyState()
                     : ListView.separated(
-                        padding:
-                            const EdgeInsets.all(AppConstants.mediumPadding),
+                        padding: const EdgeInsets.all(
+                          AppConstants.mediumPadding,
+                        ),
                         itemCount: customers.length,
                         separatorBuilder: (context, index) =>
                             const SizedBox(height: AppConstants.mediumPadding),
@@ -188,10 +189,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        customer.phone,
-                        style: AppConstants.captionStyle,
-                      ),
+                      Text(customer.phone, style: AppConstants.captionStyle),
                     ],
                   ),
                 ),
@@ -230,8 +228,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       value: 'delete',
                       child: ListTile(
                         leading: Icon(Icons.delete, color: Colors.red),
-                        title: Text('O\'chirish',
-                            style: TextStyle(color: Colors.red)),
+                        title: Text(
+                          'O\'chirish',
+                          style: TextStyle(color: Colors.red),
+                        ),
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
@@ -244,11 +244,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               const SizedBox(height: AppConstants.smallPadding),
               Row(
                 children: [
-                  Icon(
-                    Icons.location_on,
-                    size: 16,
-                    color: Colors.grey[600],
-                  ),
+                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -353,7 +349,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Widget _buildCustomerStat(
-      String title, String value, IconData icon, Color color) {
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(AppConstants.smallPadding),
       decoration: BoxDecoration(
@@ -370,9 +370,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               children: [
                 Text(
                   title,
-                  style: AppConstants.captionStyle.copyWith(
-                    fontSize: 10,
-                  ),
+                  style: AppConstants.captionStyle.copyWith(fontSize: 10),
                 ),
                 Text(
                   value,
@@ -402,9 +400,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           const SizedBox(height: 16),
           Text(
             'Hali mijozlar qo\'shilmagan',
-            style: AppConstants.subtitleStyle.copyWith(
-              color: Colors.grey,
-            ),
+            style: AppConstants.subtitleStyle.copyWith(color: Colors.grey),
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
@@ -485,8 +481,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ElevatedButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
-                final farmProvider =
-                    Provider.of<FarmProvider>(context, listen: false);
+                final farmProvider = Provider.of<FarmProvider>(
+                  context,
+                  listen: false,
+                );
                 final success = await farmProvider.addCustomer(
                   nameController.text.trim(),
                   phone: phoneController.text.trim(),
@@ -499,7 +497,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                          '${nameController.text.trim()} mijoz qo\'shildi'),
+                        '${nameController.text.trim()} mijoz qo\'shildi',
+                      ),
                       backgroundColor: AppConstants.successColor,
                     ),
                   );
@@ -583,8 +582,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ElevatedButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
-                final farmProvider =
-                    Provider.of<FarmProvider>(context, listen: false);
+                final farmProvider = Provider.of<FarmProvider>(
+                  context,
+                  listen: false,
+                );
                 final success = await farmProvider.updateCustomerInfo(
                   customer.id,
                   name: nameController.text.trim(),
@@ -620,8 +621,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   void _showAddOrderDialog(BuildContext context, Customer customer) {
     final trayController = TextEditingController();
-    final priceController =
-        TextEditingController(text: AppConstants.defaultEggPrice.toString());
+    final priceController = TextEditingController(
+      text: AppConstants.defaultEggPrice.toString(),
+    );
     final noteController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
@@ -729,14 +731,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 if (formKey.currentState?.validate() != true) return;
 
                 final trayCount = int.parse(trayController.text.trim());
-                final price =
-                    double.parse(priceController.text.replaceAll(',', '.'));
+                final price = double.parse(
+                  priceController.text.replaceAll(',', '.'),
+                );
                 final note = noteController.text.trim().isEmpty
                     ? null
                     : noteController.text.trim();
 
-                final farmProvider =
-                    Provider.of<FarmProvider>(context, listen: false);
+                final farmProvider = Provider.of<FarmProvider>(
+                  context,
+                  listen: false,
+                );
                 final success = await farmProvider.addCustomerOrder(
                   customer.id,
                   trayCount,
@@ -757,8 +762,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content:
-                          Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
                       backgroundColor: AppConstants.errorColor,
                     ),
                   );
@@ -843,7 +847,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _showMarkAsPaidDialog(
-      BuildContext context, Customer customer, CustomerOrder order) {
+    BuildContext context,
+    Customer customer,
+    CustomerOrder order,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -858,10 +865,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final farmProvider =
-                  Provider.of<FarmProvider>(context, listen: false);
+              final farmProvider = Provider.of<FarmProvider>(
+                context,
+                listen: false,
+              );
               final success = await farmProvider.markCustomerOrderAsPaid(
-                  customer.id, order.id);
+                customer.id,
+                order.id,
+              );
 
               Navigator.pop(context);
 
@@ -882,9 +893,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
               }
             },
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppConstants.successColor),
-            child:
-                const Text('Tasdiqlash', style: TextStyle(color: Colors.white)),
+              backgroundColor: AppConstants.successColor,
+            ),
+            child: const Text(
+              'Tasdiqlash',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -906,8 +920,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final farmProvider =
-                  Provider.of<FarmProvider>(context, listen: false);
+              final farmProvider = Provider.of<FarmProvider>(
+                context,
+                listen: false,
+              );
               final success = await farmProvider.removeCustomer(customer.id);
 
               Navigator.pop(context);
@@ -929,9 +945,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
               }
             },
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppConstants.errorColor),
-            child:
-                const Text('O\'chirish', style: TextStyle(color: Colors.white)),
+              backgroundColor: AppConstants.errorColor,
+            ),
+            child: const Text(
+              'O\'chirish',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

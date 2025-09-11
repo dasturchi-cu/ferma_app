@@ -60,12 +60,12 @@ class StorageService {
   // Farm data offline storage
   Future<void> saveFarmOffline(Farm farm) async {
     try {
-      // Ensure Hive is initialized
+      // Store as Map to avoid adapter requirement
       if (!Hive.isBoxOpen(AppConstants.farmBoxName)) {
-        await Hive.openBox<Farm>(AppConstants.farmBoxName);
+        await Hive.openBox<Map>(AppConstants.farmBoxName);
       }
-      final box = Hive.box<Farm>(AppConstants.farmBoxName);
-      await box.put(farm.id, farm);
+      final box = Hive.box<Map>(AppConstants.farmBoxName);
+      await box.put(farm.id, farm.toJson());
 
       // Also save as backup with timestamp
       if (!Hive.isBoxOpen('farm_backup')) {
@@ -95,10 +95,12 @@ class StorageService {
   Future<Farm?> loadFarmOffline(String userId) async {
     try {
       if (!Hive.isBoxOpen(AppConstants.farmBoxName)) {
-        await Hive.openBox<Farm>(AppConstants.farmBoxName);
+        await Hive.openBox<Map>(AppConstants.farmBoxName);
       }
-      final box = Hive.box<Farm>(AppConstants.farmBoxName);
-      return box.get(userId);
+      final box = Hive.box<Map>(AppConstants.farmBoxName);
+      final data = box.get(userId);
+      if (data is Map) return Farm.fromJson(Map<String, dynamic>.from(data));
+      return null;
     } catch (e) {
       print('Error loading farm offline: $e');
       return null;
@@ -108,10 +110,13 @@ class StorageService {
   Future<List<Farm>> getAllOfflineFarms() async {
     try {
       if (!Hive.isBoxOpen(AppConstants.farmBoxName)) {
-        await Hive.openBox<Farm>(AppConstants.farmBoxName);
+        await Hive.openBox<Map>(AppConstants.farmBoxName);
       }
-      final box = Hive.box<Farm>(AppConstants.farmBoxName);
-      return box.values.toList();
+      final box = Hive.box<Map>(AppConstants.farmBoxName);
+      return box.values
+          .whereType<Map>()
+          .map((e) => Farm.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e) {
       print('Error loading offline farms: $e');
       return [];
@@ -122,9 +127,9 @@ class StorageService {
   Future<bool> hasOfflineData(String userId) async {
     try {
       if (!Hive.isBoxOpen(AppConstants.farmBoxName)) {
-        await Hive.openBox<Farm>(AppConstants.farmBoxName);
+        await Hive.openBox<Map>(AppConstants.farmBoxName);
       }
-      final box = Hive.box<Farm>(AppConstants.farmBoxName);
+      final box = Hive.box<Map>(AppConstants.farmBoxName);
       return box.containsKey(userId);
     } catch (e) {
       print('Error checking offline data: $e');

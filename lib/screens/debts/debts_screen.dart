@@ -35,8 +35,10 @@ class _DebtsScreenState extends State<DebtsScreen>
   List<DebtItem> get _filteredDebts {
     if (_searchQuery.isEmpty) return _debts;
     return _debts
-        .where((debt) =>
-            debt.name.toLowerCase().contains(_searchQuery.toLowerCase()))
+        .where(
+          (debt) =>
+              debt.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+        )
         .toList();
   }
 
@@ -49,8 +51,10 @@ class _DebtsScreenState extends State<DebtsScreen>
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Qarz Daftari',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Qarz Daftari',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppConstants.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -61,6 +65,18 @@ class _DebtsScreenState extends State<DebtsScreen>
             tooltip: 'Statistika',
           ),
         ],
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppConstants.primaryColor,
+                AppConstants.primaryColor.withOpacity(0.85),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: Column(
         children: [
@@ -75,8 +91,8 @@ class _DebtsScreenState extends State<DebtsScreen>
             child: _filteredDebts.isEmpty && _debts.isNotEmpty
                 ? _buildNotFound()
                 : _debts.isEmpty
-                    ? _buildEmpty()
-                    : _buildList(),
+                ? _buildEmpty()
+                : _buildList(),
           ),
         ],
       ),
@@ -84,8 +100,10 @@ class _DebtsScreenState extends State<DebtsScreen>
         onPressed: _showAddDebtDialog,
         backgroundColor: AppConstants.primaryColor,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Qarz qo\'shish',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text(
+          'Qarz qo\'shish',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
         elevation: 4,
       ),
     );
@@ -152,10 +170,7 @@ class _DebtsScreenState extends State<DebtsScreen>
         const SizedBox(height: 8),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
         const SizedBox(height: 4),
         Text(
@@ -200,8 +215,10 @@ class _DebtsScreenState extends State<DebtsScreen>
                 )
               : null,
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -272,17 +289,13 @@ class _DebtsScreenState extends State<DebtsScreen>
       itemBuilder: (context, index) {
         final item = _filteredDebts[index];
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: _animationController,
-            curve: Interval(
-              index * 0.1,
-              1.0,
-              curve: Curves.easeOut,
-            ),
-          )),
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(
+                  parent: _animationController,
+                  curve: Interval(index * 0.1, 1.0, curve: Curves.easeOut),
+                ),
+              ),
           child: _buildDebtCard(item, index),
         );
       },
@@ -324,7 +337,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                           ? [Colors.red[400]!, Colors.red[600]!]
                           : [
                               AppConstants.primaryColor.withOpacity(0.7),
-                              AppConstants.primaryColor
+                              AppConstants.primaryColor,
                             ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -414,10 +427,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: Colors.red[600],
-                      ),
+                      icon: Icon(Icons.delete_outline, color: Colors.red[600]),
                       onPressed: () => _confirmDelete(actualIndex),
                       tooltip: 'O\'chirish',
                       style: IconButton.styleFrom(
@@ -497,18 +507,22 @@ class _DebtsScreenState extends State<DebtsScreen>
               final amount = double.tryParse(amountCtrl.text.trim());
               if (name.isNotEmpty && amount != null && amount > 0) {
                 setState(() {
-                  _debts.add(DebtItem(
-                    name: name,
-                    amount: amount,
-                    createdAt: DateTime.now(),
-                  ));
+                  _debts.add(
+                    DebtItem(
+                      name: name,
+                      amount: amount,
+                      createdAt: DateTime.now(),
+                    ),
+                  );
                 });
                 Navigator.pop(context);
                 _animationController.forward();
                 _showSnackBar('Qarz muvaffaqiyatli qo\'shildi', Colors.green);
               } else {
                 _showSnackBar(
-                    'Iltimos, barcha maydonlarni to\'ldiring', Colors.red);
+                  'Iltimos, barcha maydonlarni to\'ldiring',
+                  Colors.red,
+                );
               }
             },
             style: ElevatedButton.styleFrom(
@@ -538,11 +552,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                 color: Colors.green.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.payment,
-                color: Colors.green,
-                size: 24,
-              ),
+              child: const Icon(Icons.payment, color: Colors.green, size: 24),
             ),
             const SizedBox(width: 12),
             const Text('To\'lov kiritish'),
@@ -582,9 +592,10 @@ class _DebtsScreenState extends State<DebtsScreen>
               final pay = double.tryParse(payCtrl.text.trim());
               if (pay != null && pay > 0) {
                 setState(() {
-                  final newAmount = (_debts[index].amount - pay)
+                  final updated = (_debts[index].amount - pay)
                       .clamp(0, double.infinity)
                       .toDouble();
+                  _debts[index] = _debts[index].copyWith(amount: updated);
                 });
                 Navigator.pop(context);
                 final message = pay >= currentDebt.amount
@@ -667,10 +678,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                 children: [
                   Text(
                     'Qarz summasi',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -788,13 +796,21 @@ class _DebtsScreenState extends State<DebtsScreen>
           children: [
             _buildStatRow('Jami mijozlar:', '${_debts.length} ta'),
             _buildStatRow(
-                'Umumiy qarz:', '${_totalDebt.toStringAsFixed(0)} so\'m'),
+              'Umumiy qarz:',
+              '${_totalDebt.toStringAsFixed(0)} so\'m',
+            ),
             _buildStatRow(
-                'O\'rtacha qarz:', '${avgDebt.toStringAsFixed(0)} so\'m'),
-            _buildStatRow('Eng katta qarz:',
-                '${maxDebt.amount.toStringAsFixed(0)} so\'m (${maxDebt.name})'),
-            _buildStatRow('Eng kichik qarz:',
-                '${minDebt.amount.toStringAsFixed(0)} so\'m (${minDebt.name})'),
+              'O\'rtacha qarz:',
+              '${avgDebt.toStringAsFixed(0)} so\'m',
+            ),
+            _buildStatRow(
+              'Eng katta qarz:',
+              '${maxDebt.amount.toStringAsFixed(0)} so\'m (${maxDebt.name})',
+            ),
+            _buildStatRow(
+              'Eng kichik qarz:',
+              '${minDebt.amount.toStringAsFixed(0)} so\'m (${minDebt.name})',
+            ),
           ],
         ),
         actions: [
@@ -851,17 +867,9 @@ class DebtItem {
   final double amount;
   final DateTime? createdAt;
 
-  const DebtItem({
-    required this.name,
-    required this.amount,
-    this.createdAt,
-  });
+  const DebtItem({required this.name, required this.amount, this.createdAt});
 
-  DebtItem copyWith({
-    String? name,
-    double? amount,
-    DateTime? createdAt,
-  }) =>
+  DebtItem copyWith({String? name, double? amount, DateTime? createdAt}) =>
       DebtItem(
         name: name ?? this.name,
         amount: amount ?? this.amount,

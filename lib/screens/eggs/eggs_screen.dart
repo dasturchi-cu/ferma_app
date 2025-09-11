@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/farm_provider.dart';
-import '../../utils/constants.dart' as AppConstants;
+// import '../../utils/constants.dart' as AppConstants;
 import '../../widgets/stat_card.dart';
 
 class EggsScreen extends StatefulWidget {
@@ -155,8 +155,9 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   Future<void> _saveProduction() async {
     final farmProvider = Provider.of<FarmProvider>(context, listen: false);
     final trayCount = int.parse(_trayCountController.text);
-    final note =
-        _notesController.text.isNotEmpty ? _notesController.text : null;
+    final note = _notesController.text.isNotEmpty
+        ? _notesController.text
+        : null;
 
     final success = await farmProvider.addEggProduction(trayCount, note: note);
 
@@ -199,8 +200,8 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Theme.of(context).colorScheme.secondary,
-                      Theme.of(context).colorScheme.secondary.withOpacity(0.8),
+                      Theme.of(context).primaryColor,
+                      Theme.of(context).primaryColor.withOpacity(0.85),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -215,11 +216,15 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                         children: [
                           if (Navigator.canPop(context))
                             IconButton(
-                              icon: const Icon(Icons.arrow_back, color: Colors.white),
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                              ),
                               onPressed: () => Navigator.of(context).maybePop(),
                               tooltip: 'Ortga',
                             ),
-                          if (Navigator.canPop(context)) const SizedBox(width: 8),
+                          if (Navigator.canPop(context))
+                            const SizedBox(width: 8),
                           const Icon(
                             Icons.egg_outlined,
                             color: Colors.white,
@@ -292,6 +297,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'eggs_fab',
         onPressed: () => _showQuickActionsDialog(context),
         backgroundColor: Theme.of(context).colorScheme.secondary,
         child: const Icon(Icons.add, color: Colors.white),

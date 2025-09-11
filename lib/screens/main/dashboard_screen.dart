@@ -3,7 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../utils/app_theme.dart';
 
 class ModernDashboard extends StatelessWidget {
-  const ModernDashboard({super.key});
+  final void Function(int index)? onTabSelected;
+  const ModernDashboard({super.key, this.onTabSelected});
 
   @override
   Widget build(BuildContext context) {
@@ -122,9 +123,9 @@ class ModernDashboard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatItem('Tuxum', '1,245', Icons.egg_outlined),
-              _buildStatItem('Mijozlar', '24', Icons.people_outline),
-              _buildStatItem('Qarz', '1.2M', Icons.receipt_long_outlined),
+              _buildStatItem('Tuxum', '—', Icons.egg_outlined),
+              _buildStatItem('Mijozlar', '—', Icons.people_outline),
+              _buildStatItem('Qarz', '—', Icons.receipt_long_outlined),
             ],
           ),
         ],
@@ -163,7 +164,12 @@ class ModernDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color) {
+  Widget _buildActionButton(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
@@ -174,7 +180,7 @@ class ModernDashboard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () {},
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             child: Row(
@@ -200,29 +206,6 @@ class ModernDashboard extends StatelessWidget {
   }
 
   Widget _buildQuickActions() {
-    final actions = [
-      {
-        'icon': Icons.add_circle_outline,
-        'label': 'Tuxum Qo\'shish',
-        'color': AppTheme.primaryColor,
-      },
-      {
-        'icon': Icons.person_add_alt_1_outlined,
-        'label': 'Mijoz Qo\'shish',
-        'color': AppTheme.secondaryColor,
-      },
-      {
-        'icon': Icons.receipt_long_outlined,
-        'label': 'Qarz Qo\'shish',
-        'color': AppTheme.accentColor,
-      },
-      {
-        'icon': Icons.analytics_outlined,
-        'label': 'Hisobot',
-        'color': AppTheme.tertiaryColor,
-      },
-    ];
-
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -231,13 +214,32 @@ class ModernDashboard extends StatelessWidget {
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
       childAspectRatio: 3,
-      children: actions.map((action) {
-        return _buildActionButton(
-          action['icon'] as IconData,
-          action['label'] as String,
-          action['color'] as Color,
-        );
-      }).toList(),
+      children: [
+        _buildActionButton(
+          Icons.add_circle_outline,
+          'Tuxum Qo\'shish',
+          AppTheme.primaryColor,
+          onTap: () => onTabSelected?.call(2),
+        ),
+        _buildActionButton(
+          Icons.person_add_alt_1_outlined,
+          'Mijoz Qo\'shish',
+          AppTheme.secondaryColor,
+          onTap: () => onTabSelected?.call(1),
+        ),
+        _buildActionButton(
+          Icons.receipt_long_outlined,
+          'Qarz Qo\'shish',
+          AppTheme.accentColor,
+          onTap: () => onTabSelected?.call(4),
+        ),
+        _buildActionButton(
+          Icons.analytics_outlined,
+          'Hisobot',
+          AppTheme.tertiaryColor,
+          onTap: () => onTabSelected?.call(3),
+        ),
+      ],
     );
   }
 
@@ -266,25 +268,11 @@ class ModernDashboard extends StatelessWidget {
   Widget _buildRecentActivities() {
     final activities = [
       {
-        'title': 'Yangi mijoz qo\'shildi',
-        'subtitle': 'Ali Valiyev',
-        'time': '5 min oldin',
-        'icon': Icons.person_add,
-        'color': AppTheme.success,
-      },
-      {
-        'title': 'Tuxum qo\'shildi',
-        'subtitle': '120 dona',
-        'time': '1 soat oldin',
-        'icon': Icons.egg_outlined,
-        'color': AppTheme.primaryColor,
-      },
-      {
-        'title': 'Qarz qo\'shildi',
-        'subtitle': '150,000 so\'m',
-        'time': '3 soat oldin',
-        'icon': Icons.receipt_long,
-        'color': AppTheme.warning,
+        'title': 'So\'nggi harakatlar bu yerda ko\'rinadi',
+        'subtitle': 'Ma\'lumot qo\'shilganda yangilanadi',
+        'time': '',
+        'icon': Icons.info_outline,
+        'color': AppTheme.info,
       },
     ];
 
@@ -378,10 +366,22 @@ class ModernDashboard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildNavItem(Icons.home_rounded, 'Asosiy', true),
-          _buildNavItem(Icons.people_alt_rounded, 'Mijozlar', false),
-          _buildNavItem(Icons.egg_alt_rounded, 'Tuxum', false),
-          _buildNavItem(Icons.receipt_long_rounded, 'Hisobot', false),
+          GestureDetector(
+            onTap: () => onTabSelected?.call(0),
+            child: _buildNavItem(Icons.home_rounded, 'Asosiy', true),
+          ),
+          GestureDetector(
+            onTap: () => onTabSelected?.call(1),
+            child: _buildNavItem(Icons.people_alt_rounded, 'Mijozlar', false),
+          ),
+          GestureDetector(
+            onTap: () => onTabSelected?.call(2),
+            child: _buildNavItem(Icons.egg_alt_rounded, 'Tuxum', false),
+          ),
+          GestureDetector(
+            onTap: () => onTabSelected?.call(3),
+            child: _buildNavItem(Icons.receipt_long_rounded, 'Hisobot', false),
+          ),
         ],
       ),
     );

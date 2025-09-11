@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:math';
 import '../../utils/app_theme.dart';
 import '../../widgets/progress_visualization.dart';
-import '../../services/smart_analytics.dart';
+// import '../../services/smart_analytics.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -291,6 +291,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'analytics_fab',
         onPressed: () {
           setState(() {
             _isLiveMode = !_isLiveMode;

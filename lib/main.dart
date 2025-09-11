@@ -47,12 +47,25 @@ class FermaApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => FarmProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, FarmProvider>(
+          create: (_) => FarmProvider(),
+          update: (_, auth, farmProv) {
+            final provider = farmProv ?? FarmProvider();
+            final farm = auth.farm;
+            if (farm != null) {
+              provider.setFarm(farm);
+              provider.startRealtime();
+            } else {
+              provider.stopRealtime();
+            }
+            return provider;
+          },
+        ),
       ],
       child: MaterialApp(
         title: 'Ferma App',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.lightTheme,
         home: const SplashScreen(),
         routes: {
           '/login': (context) => const LoginScreen(),

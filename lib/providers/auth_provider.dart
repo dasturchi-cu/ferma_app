@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/farm.dart';
+import '../models/egg.dart';
+import '../models/chicken.dart';
 // Removed unused import
 import '../services/storage_service.dart';
 import '../config/supabase_config.dart';
@@ -79,8 +81,11 @@ class AuthProvider with ChangeNotifier {
 
       // Try to load from Supabase
       try {
-        final response =
-            await _supabase.from('farms').select().eq('id', _user!.id).single();
+        final response = await _supabase
+            .from('farms')
+            .select()
+            .eq('id', _user!.id)
+            .single();
 
         _farm = Farm.fromJson(response);
         await _saveToHive();
@@ -90,6 +95,9 @@ class AuthProvider with ChangeNotifier {
           id: _user!.id,
           name: 'Mening Fermam',
           ownerId: _user!.id,
+          chicken: Chicken(id: _user!.id, totalCount: 0, deaths: const []),
+          egg: Egg(id: _user!.id),
+          customers: const [],
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -163,6 +171,13 @@ class AuthProvider with ChangeNotifier {
           id: response.user!.id,
           name: farmName,
           ownerId: response.user!.id,
+          chicken: Chicken(
+            id: response.user!.id,
+            totalCount: 0,
+            deaths: const [],
+          ),
+          egg: Egg(id: response.user!.id),
+          customers: const [],
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -171,10 +186,7 @@ class AuthProvider with ChangeNotifier {
         await _saveToHive();
 
         // Save login state
-        await _storage.saveLoginState(
-          userId: response.user!.id,
-          email: email,
-        );
+        await _storage.saveLoginState(userId: response.user!.id, email: email);
 
         return true;
       }
@@ -205,10 +217,7 @@ class AuthProvider with ChangeNotifier {
 
       if (response.user != null) {
         // Save login state
-        await _storage.saveLoginState(
-          userId: response.user!.id,
-          email: email,
-        );
+        await _storage.saveLoginState(userId: response.user!.id, email: email);
       }
 
       return true;
@@ -262,10 +271,7 @@ class AuthProvider with ChangeNotifier {
   // Ferma nomini yangilash
   Future<void> updateFarmName(String newName) async {
     if (_farm != null) {
-      _farm = _farm!.copyWith(
-        name: newName,
-        updatedAt: DateTime.now(),
-      );
+      _farm = _farm!.copyWith(name: newName, updatedAt: DateTime.now());
       await _saveToSupabase();
       await _saveToHive();
       notifyListeners();

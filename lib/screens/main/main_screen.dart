@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/farm_provider.dart';
 import '../../utils/constants.dart';
-import '../analytics/analytics_screen.dart';
+import '../analytics/reports_screen.dart';
 import '../customers/customers_screen.dart';
 import '../debts/debts_screen.dart';
 import '../eggs/eggs_screen.dart';
@@ -20,17 +20,18 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    ModernDashboard(),
-    CustomersScreen(),
-    EggsScreen(),
-    AnalyticsScreen(),
-    DebtsScreen()
-  ];
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    _screens = [
+      ModernDashboard(onTabSelected: (i) => setState(() => _currentIndex = i)),
+      const CustomersScreen(),
+      const EggsScreen(),
+      const ReportsScreen(),
+      const DebtsScreen(),
+    ];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final farmProvider = Provider.of<FarmProvider>(context, listen: false);
@@ -56,33 +57,6 @@ class _MainScreenState extends State<MainScreen> {
                 selected: _currentIndex == 0,
                 onTap: () {
                   setState(() => _currentIndex = 0);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.people),
-                title: const Text('Mijozlar'),
-                selected: _currentIndex == 1,
-                onTap: () {
-                  setState(() => _currentIndex = 1);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.egg),
-                title: const Text('Tuxum'),
-                selected: _currentIndex == 2,
-                onTap: () {
-                  setState(() => _currentIndex = 2);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.analytics),
-                title: const Text('Hisobot'),
-                selected: _currentIndex == 3,
-                onTap: () {
-                  setState(() => _currentIndex = 3);
                   Navigator.pop(context);
                 },
               ),
@@ -145,41 +119,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  void _showSettingsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sozlamalar'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Ferma nomini o\'zgartirish'),
-              onTap: () {
-                Navigator.pop(context);
-                _showEditFarmNameDialog(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('Ilova haqida'),
-              onTap: () {
-                Navigator.pop(context);
-                _showAboutDialog(context);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Yopish'),
-          ),
-        ],
-      ),
-    );
-  }
+  // removed unused settings dialog
 
   void _showLogoutDialog(BuildContext context) {
     showDialog(

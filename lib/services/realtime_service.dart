@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 typedef RealtimeCallback = void Function(Map<String, dynamic> payload);
+typedef ChartDataCallback = void Function(List<Map<String, dynamic>> data);
 
 /// Service for handling realtime subscriptions and presence
 class RealtimeService {
@@ -96,6 +98,107 @@ class RealtimeService {
     } catch (e) {
       print('Error: $e');
       rethrow;
+    }
+  }
+
+  /// Subscribe to customer changes
+  RealtimeChannel subscribeToCustomers({
+    required Function(PostgresChangePayload) onCustomerChanged,
+    String? customerId,
+  }) {
+    final channel = subscribeToTable(
+      table: 'customers',
+      event: '*',
+      filter: customerId,
+    );
+
+    // Handle the callback
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      callback: onCustomerChanged,
+    );
+
+    return channel;
+  }
+
+  /// Subscribe to egg records changes
+  RealtimeChannel subscribeToEggRecords({
+    required Function(PostgresChangePayload) onEggRecordChanged,
+    String? recordId,
+  }) {
+    final channel = subscribeToTable(
+      table: 'egg_records',
+      event: '*',
+      filter: recordId,
+    );
+
+    // Handle the callback
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      callback: onEggRecordChanged,
+    );
+
+    return channel;
+  }
+
+  /// Stream chart data for a specific metric
+  RealtimeChannel subscribeToChartData({
+    required String metric,
+    required DateTimeRange dateRange, // DateTimeRange is from material.dart
+    required ChartDataCallback onDataUpdated,
+  }) {
+    final channelName = 'chart_${metric}_${dateRange.start.millisecondsSinceEpoch}';
+
+    // Return existing channel if it exists
+    if (_channels.containsKey(channelName)) {
+      return _channels[channelName]!;
+    }
+
+    // Create a new channel
+    final channel = _realtime.channel(channelName);
+
+    // In a real implementation, you would set up a database function or RPC call
+    // to get the initial data and then listen for changes
+    _fetchInitialChartData(metric, dateRange).then((initialData) {
+      onDataUpdated(initialData);
+    });
+
+    // Store the channel reference
+    _channels[channelName] = channel;
+
+    return channel;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchInitialChartData(
+    String metric,
+    DateTimeRange dateRange, // DateTimeRange is from material.dart
+  ) async {
+    // Replace with actual database query based on metric type
+    switch (metric) {
+      case 'daily_eggs':
+        final response = await _supabase
+            .from('egg_records')
+            .select()
+            .gte('date', dateRange.start.toIso8601String())
+            .lte('date', dateRange.end.toIso8601String())
+            .order('date');
+        return List<Map<String, dynamic>>.from(response);
+      case 'sales':
+        final response = await _supabase
+            .from('sales')
+            .select()
+            .gte('sale_date', dateRange.start.toIso8601String())
+            .lte('sale_date', dateRange.end.toIso8601String())
+            .order('sale_date');
+        return List<Map<String, dynamic>>.from(response);
+      case 'debts':
+        final response = await _supabase
+            .from('customers')
+            .select()
+            .order('debt_amount', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      default:
+        return [];
     }
   }
 
