@@ -75,4 +75,4 @@ class FermaApp extends StatelessWidget {
     );
   }
 }
-//YAXSHIMI
+//YAXSHIM ищкьш щкй I
