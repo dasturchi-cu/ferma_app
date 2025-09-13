@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
 import '../models/farm.dart';
+import '../models/customer.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../config/supabase_config.dart';
@@ -14,7 +18,12 @@ class FarmProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isOfflineMode = false;
+
+  // Realtime subscriptions
   StreamSubscription<List<Map<String, dynamic>>>? _farmStreamSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _customersStreamSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _eggRecordsStreamSub;
+  StreamSubscription<List<ConnectivityResult>>? _connectivityStreamSub;
 
   // Getters
   Farm? get farm => _farm;
@@ -22,26 +31,115 @@ class FarmProvider with ChangeNotifier {
   String? get error => _error;
   bool get isOfflineMode => _isOfflineMode;
 
-  // Farm ma'lumotlarini o'rnatish
+  // Farmni o'rnatish
   void setFarm(Farm farm) {
     _farm = farm;
     notifyListeners();
+    // Auto-load data when farm is set
+    _loadAllData();
+    // Start connectivity monitoring
+    _startConnectivityMonitoring();
+  }
+  
+  // Load all data automatically
+  Future<void> _loadAllData() async {
+    try {
+      await _refreshFarmData();
+      await startRealtime();
+    } catch (e) {
+      print('Auto load data error: $e');
+    }
+  }
+  
+  // Start monitoring internet connectivity
+  void _startConnectivityMonitoring() {
+    _connectivityStreamSub = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) async {
+      final isConnected = results.any((result) => result != ConnectivityResult.none);
+      
+      if (isConnected && _isOfflineMode) {
+        print('Internet ga ulandi! Offline ma\'lumotlarni sync qilish...');
+        _isOfflineMode = false;
+        // Sync offline data to Supabase
+        await _syncOfflineData();
+        await startRealtime();
+        notifyListeners();
+      } else if (!isConnected && !_isOfflineMode) {
+        print('Internet uzildi! Offline rejimga o\'tish...');
+        _isOfflineMode = true;
+        await stopRealtime();
+        notifyListeners();
+      }
+    });
+  }
+  
+  // Sync offline data to Supabase when internet comes back
+  Future<void> _syncOfflineData() async {
+    if (_farm == null) return;
+    
+    try {
+      await _saveToSupabase();
+      print('Offline ma\'lumotlar muvaffaqiyatli Supabase ga yuklandi!');
+    } catch (e) {
+      print('Offline ma\'lumotlarni sync qilishda xatolik: $e');
+      _isOfflineMode = true; // Stay offline if sync fails
+    }
   }
 
-  // Start realtime streaming for current farm row
+  // -----------------------------
+  // Realtime
+  // -----------------------------
   Future<void> startRealtime() async {
     if (_farm == null) return;
     await stopRealtime();
+
     try {
+      // Farm stream
       _farmStreamSub = _supabase
           .from('farms')
           .stream(primaryKey: ['id'])
           .eq('id', _farm!.id)
           .listen((rows) async {
             if (rows.isNotEmpty) {
-              final updated = Farm.fromJson(rows.first);
-              _farm = updated;
-              // keep offline in sync
+              try {
+                final farmData = rows.first;
+                
+                // Safe null check - only process if essential data is valid
+                if (farmData != null && 
+                    farmData['id'] != null && 
+                    farmData['name'] != null &&
+                    farmData['owner_id'] != null) {
+                  final updated = Farm.fromJson(farmData);
+                  _farm = updated;
+                  await _saveToHive();
+                  print('📡 Realtime farm yangilandi: ${_farm?.name}');
+                  notifyListeners();
+                } else {
+                  print('⚠️ Realtime da noto\'g\'ri farm ma\'lumoti, e\'tibor berilmadi');
+                }
+              } catch (e) {
+                print('⚠️ Realtime farm ma\'lumotini parse qilishda xatolik: $e');
+                // Don't crash the app, just log the error
+              }
+            }
+          });
+
+      // Customers stream
+      _customersStreamSub = _supabase
+          .from('customers')
+          .stream(primaryKey: ['id'])
+          .eq('farm_id', _farm!.id)
+          .listen((rows) async {
+            await _refreshFarmData();
+          });
+
+      // Egg records stream
+      _eggRecordsStreamSub = _supabase
+          .from('egg_productions')
+          .stream(primaryKey: ['id'])
+          .eq('farm_id', _farm!.id)
+          .listen((rows) async {
+            if (_farm != null && _farm!.egg != null) {
+              await _processEggRecords(rows);
               await _saveToHive();
               notifyListeners();
             }
@@ -54,451 +152,265 @@ class FarmProvider with ChangeNotifier {
 
   Future<void> stopRealtime() async {
     await _farmStreamSub?.cancel();
+    await _customersStreamSub?.cancel();
+    await _eggRecordsStreamSub?.cancel();
+    await _connectivityStreamSub?.cancel();
     _farmStreamSub = null;
+    _customersStreamSub = null;
+    _eggRecordsStreamSub = null;
+    _connectivityStreamSub = null;
   }
 
-  // Tovuqlar qo'shish
-  Future<bool> addChickens(int count) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+  // -----------------------------
+  // Supabase dan farmni yangilash
+  // -----------------------------
+  Future<void> _refreshFarmData() async {
+    if (_farm == null) return;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
+      // Internet bor yoki yo'qligini tekshirish
+      final response = await _supabase
+          .from('farms')
+          .select()
+          .eq('id', _farm!.id)
+          .maybeSingle();
 
-      _farm!.addChickens(count);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
+      if (response != null) {
+        _farm = Farm.fromJson(response);
+        await _saveToHive();
+        _isOfflineMode = false;
+        notifyListeners();
       }
+    } catch (e) {
+      print('Farmni yangilashda xatolik, offline rejimga o\'tildi: $e');
+      _isOfflineMode = true;
+      // Load from Hive if online fails
+      await _loadFromHive();
+    }
+  }
 
+  // Egg recordsni qayta ishlash
+  Future<void> _processEggRecords(List<Map<String, dynamic>> records) async {
+    if (_farm?.egg == null) return;
+
+    for (final record in records) {
+      final trayCount = (record['tray_count'] as num?)?.toInt() ?? 0;
+      final pricePerTray =
+          (record['price_per_tray'] as num?)?.toDouble() ?? 0.0;
+      final note = record['note'] as String?;
+      final type = record['record_type'] as String? ?? 'production';
+
+      switch (type) {
+        case 'production':
+          _farm!.egg!.addProduction(trayCount, note: note);
+          break;
+        case 'sale':
+          _farm!.egg!.addSale(trayCount, pricePerTray, note: note);
+          break;
+        case 'broken':
+          _farm!.addBrokenEgg(trayCount, note: note);
+          break;
+        case 'large':
+          _farm!.addLargeEgg(trayCount, note: note);
+          break;
+        default:
+          _farm!.egg!.addProduction(trayCount, note: note);
+          break;
+      }
+    }
+  }
+
+  // -----------------------------
+  // Farm actions
+  // -----------------------------
+  Future<bool> addChickens(int count) async {
+    if (_farm == null) return false;
+    try {
+      _farm!.addChickens(count);
+      await _addActivityLog('Tovuqlar qo\'shildi', 
+        '$count dona tovuq ferma ga qo\'shildi. Jami: ${_farm!.chicken?.currentCount ?? 0}');
+      await _persist();
       return true;
     } catch (e) {
       _error = 'Tovuqlar qo\'shishda xatolik: $e';
+      await _addActivityLog('Xatolik', 'Tovuq qo\'shishda xatolik: $e');
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Tovuq o'limi qo'shish
   Future<bool> addChickenDeath(int count) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+    if (_farm == null) return false;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
       _farm!.addChickenDeath(count);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      await _addActivityLog('Tovuq o\'limi', 
+        '$count dona tovuq o\'ldi. Qolgan: ${_farm!.chicken?.currentCount ?? 0}');
+      await _persist();
       return true;
     } catch (e) {
-      final msg = e.toString();
-      // Modeldan kelgan aniq xabarlarni toza ko'rsatamiz
-      if (msg.contains('Tovuqlar soni yetarli emas')) {
-        _error = 'Tovuqlar soni yetarli emas';
-      } else if (msg.contains('Tovuqlar mavjud emas')) {
-        _error = 'Tovuqlar mavjud emas';
-      } else if (msg.contains('0 dan katta')) {
-        _error = 'O\'lim soni 0 dan katta bo\'lishi kerak';
-      } else {
-        _error = 'Tovuq o\'limi qo\'shishda xatolik: $e';
-      }
+      _error = 'Tovuq o\'limini qo\'shishda xatolik: $e';
+      await _addActivityLog('Xatolik', 'Tovuq o\'limini qo\'shishda xatolik: $e');
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Tuxum ishlab chiqarish qo'shish
-  Future<bool> addEggProduction(int trayCount, {String? note}) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+  Future<bool> addEggProduction(int trays, {String? note}) async {
+    if (_farm == null) return false;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
-      _farm!.addEggProduction(trayCount, note: note);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      _farm!.addEggProduction(trays, note: note);
+      final currentStock = _farm!.egg?.currentStock ?? 0;
+      await _addActivityLog('Tuxum ishlab chiqarildi', 
+        '$trays fletka tuxum ishlab chiqarildi. Jami zaxira: $currentStock fletka${note != null ? '. Izoh: $note' : ''}');
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Tuxum ishlab chiqarish qo\'shishda xatolik: $e';
+      _error = 'Tuxum ishlab chiqarishda xatolik: $e';
+      await _addActivityLog('Xatolik', 'Tuxum ishlab chiqarishda xatolik: $e');
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Tuxum sotuvini qo'shish
   Future<bool> addEggSale(
-    int trayCount,
+    int trays,
     double pricePerTray, {
     String? note,
   }) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
+    if (_farm == null) return false;
+    
+    // Check if enough stock is available
+    final currentStock = _farm!.egg?.currentStock ?? 0;
+    if (trays > currentStock) {
+      _error = 'Yetarli tuxum yo\'q! Mavjud: $currentStock fletka';
       return false;
     }
-
+    
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
-      _farm!.addEggSale(trayCount, pricePerTray, note: note);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      _farm!.addEggSale(trays, pricePerTray, note: note);
+      final totalAmount = trays * pricePerTray;
+      final remainingStock = _farm!.egg?.currentStock ?? 0;
+      await _addActivityLog('Tuxum sotildi', 
+        '$trays fletka tuxum ${totalAmount.toStringAsFixed(0)} so\'mga sotildi. Qolgan: $remainingStock fletka${note != null ? '. Izoh: $note' : ''}');
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Tuxum sotuvini qo\'shishda xatolik: $e';
+      _error = 'Tuxum sotishda xatolik: $e';
+      await _addActivityLog('Xatolik', 'Tuxum sotishda xatolik: $e');
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Siniq tuxum qo'shish
-  Future<bool> addBrokenEgg(int trayCount, {String? note}) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
+  Future<bool> addBrokenEgg(int trays, {String? note}) async {
+    if (_farm == null) return false;
+    
+    // Check if enough stock is available
+    final currentStock = _farm!.egg?.currentStock ?? 0;
+    if (trays > currentStock) {
+      _error = 'Yetarli tuxum yo\'q! Mavjud: $currentStock fletka';
       return false;
     }
-
+    
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
-      _farm!.addBrokenEgg(trayCount, note: note);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      _farm!.addBrokenEgg(trays, note: note);
+      await _persist();
       return true;
     } catch (e) {
       _error = 'Siniq tuxum qo\'shishda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Katta tuxum qo'shish
-  Future<bool> addLargeEgg(int trayCount, {String? note}) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+  Future<bool> addLargeEgg(int trays, {String? note}) async {
+    if (_farm == null) return false;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
-      _farm!.addLargeEgg(trayCount, note: note);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      _farm!.addLargeEgg(trays, note: note);
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Katta tuxum qo\'shishda xatolik: $e';
+      _error = 'Katta tuxum qo‘shishda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Mijoz qo'shish
   Future<bool> addCustomer(
     String name, {
     String? phone,
     String? address,
   }) async {
     if (_farm == null) return false;
-
     try {
-      _isLoading = true;
-      notifyListeners();
-
       _farm!.addCustomer(name, phone: phone, address: address);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      await _addActivityLog('Yangi mijoz', 
+        'Mijoz qo\'shildi: $name${phone != null ? ' ($phone)' : ''}${address != null ? ', $address' : ''}');
+      await _persist();
       return true;
     } catch (e) {
       _error = 'Mijoz qo\'shishda xatolik: $e';
+      await _addActivityLog('Xatolik', 'Mijoz qo\'shishda xatolik: $e');
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Mijozni o'chirish
   Future<bool> removeCustomer(String customerId) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+    if (_farm == null) return false;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
       _farm!.removeCustomer(customerId);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Mijozni o\'chirishda xatolik: $e';
+      _error = 'Mijozni o‘chirishda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Mijoz buyurtmasini qo'shish
   Future<bool> addCustomerOrder(
     String customerId,
-    int trayCount,
+    int trays,
     double pricePerTray,
     DateTime deliveryDate, {
     String? note,
   }) async {
     if (_farm == null) return false;
-
     try {
-      _isLoading = true;
-      notifyListeners();
-
       _farm!.addCustomerOrder(
         customerId,
-        trayCount,
+        trays,
         pricePerTray,
         deliveryDate,
         note: note,
       );
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Mijoz buyurtmasini qo\'shishda xatolik: $e';
+      _error = 'Mijoz buyurtmasini qo‘shishda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Mijoz buyurtmasini to'langan deb belgilash
   Future<bool> markCustomerOrderAsPaid(
     String customerId,
     String orderId,
   ) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+    if (_farm == null) return false;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
       _farm!.markCustomerOrderAsPaid(customerId, orderId);
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Buyurtmani to\'langan deb belgilashda xatolik: $e';
+      _error = 'Buyurtmani to‘langan deb belgilashda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Mijoz buyurtmasini o'chirish
   Future<bool> removeCustomerOrder(String customerId, String orderId) async {
-    if (_farm == null) {
-      _error =
-          'Ferma ma\'lumotlari topilmadi. Avval tizimga kiring yoki fermani yuklang.';
-      notifyListeners();
-      return false;
-    }
-
+    if (_farm == null) return false;
     try {
-      _error = null;
-      _isLoading = true;
-      notifyListeners();
-
-      final customer = _farm!.findCustomer(customerId);
-      if (customer != null) {
-        customer.removeOrder(orderId);
-        // Save data (offline first, then sync if online)
-        await _saveToHive();
-        if (!_isOfflineMode) {
-          try {
-            await _saveToSupabase();
-          } catch (e) {
-            // If Firebase fails, continue in offline mode
-            _isOfflineMode = true;
-            print('Switching to offline mode: $e');
-          }
-        }
-        return true;
-      }
-      return false;
+      _farm!.removeCustomerOrder(customerId, orderId);
+      await _persist();
+      return true;
     } catch (e) {
-      _error = 'Mijoz buyurtmasini o\'chirishda xatolik: $e';
+      _error = 'Buyurtmani o‘chirishda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Mijoz ma'lumotlarini yangilash
   Future<bool> updateCustomerInfo(
     String customerId, {
     String? name,
@@ -506,87 +418,439 @@ class FarmProvider with ChangeNotifier {
     String? address,
   }) async {
     if (_farm == null) return false;
-
     try {
-      _isLoading = true;
-      notifyListeners();
-
       _farm!.updateCustomerInfo(
         customerId,
         name: name,
         phone: phone,
         address: address,
       );
-
-      // Save data (offline first, then sync if online)
-      await _saveToHive();
-      if (!_isOfflineMode) {
-        try {
-          await _saveToSupabase();
-        } catch (e) {
-          // If Firebase fails, continue in offline mode
-          _isOfflineMode = true;
-          print('Switching to offline mode: $e');
-        }
-      }
-
+      await _persist();
       return true;
     } catch (e) {
-      _error = 'Mijoz ma\'lumotlarini yangilashda xatolik: $e';
+      _error = 'Mijozni yangilashda xatolik: $e';
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  // Supabase'ga saqlash
-  Future<void> _saveToSupabase() async {
-    if (_farm == null) return;
-
+  Future<bool> addCustomerEggSale(
+    String customerId,
+    int trays,
+    double pricePerTray, {
+    String? note,
+  }) async {
+    if (_farm == null) return false;
+    
+    // Check if enough stock is available
+    final currentStock = _farm!.egg?.currentStock ?? 0;
+    if (trays > currentStock) {
+      _error = 'Yetarli tuxum yo\'q! Mavjud: $currentStock fletka';
+      return false;
+    }
+    
     try {
-      // Asosiy ferma ma'lumotlari
-      await _supabase
-          .from(AppConstants.farmsCollection)
-          .upsert(_farm!.toJson());
+      // Reduce egg stock
+      _farm!.addEggSale(trays, pricePerTray, note: note ?? 'Mijozga sotildi');
+      
+      // Add as unpaid order (debt) to customer
+      final deliveryDate = DateTime.now();
+      _farm!.addCustomerOrder(
+        customerId,
+        trays,
+        pricePerTray,
+        deliveryDate,
+        note: note ?? 'Tuxum sotildi - qarz',
+      );
+      
+      await _persist();
+      return true;
     } catch (e) {
-      _error = 'Supabase\'ga saqlashda xatolik: $e';
+      _error = 'Mijozga tuxum sotishda xatolik: $e';
+      return false;
+    }
+  }
+
+  Future<bool> addManualDebt({
+    required String customerName,
+    required String customerPhone,
+    required String customerAddress,
+    required double debtAmount,
+    required String note,
+  }) async {
+    if (_farm == null) return false;
+    
+    try {
+      // Create a SEPARATE debt record (not in regular customers list)
+      // This debt will ONLY show in Debts screen, not in Customers screen
+      
+      // Check if this person already has a debt record
+      String? existingDebtorId;
+      final existingDebtor = _farm!.customers.where(
+        (c) => c.phone.replaceAll(RegExp(r'\s+'), '') == customerPhone.replaceAll(RegExp(r'\s+'), '') && 
+               c.name.startsWith('QARZ:')
+      ).firstOrNull;
+      
+      if (existingDebtor != null) {
+        // Update existing debt record
+        existingDebtorId = existingDebtor.id;
+      } else {
+        // Create new debt-only customer (marked with QARZ: prefix)
+        _farm!.addCustomer(
+          'QARZ: $customerName', // Special prefix to identify debt-only customers
+          phone: customerPhone,
+          address: customerAddress.isNotEmpty ? customerAddress : null,
+        );
+        existingDebtorId = _farm!.customers.last.id;
+      }
+      
+      // Add debt as unpaid order
+      final deliveryDate = DateTime.now();
+      _farm!.addCustomerOrder(
+        existingDebtorId,
+        0, // 0 trays for manual debt
+        debtAmount, // total debt amount
+        deliveryDate,
+        note: 'MANUAL_DEBT: ${note.isNotEmpty ? note : "Qo'lda qo'shilgan qarz"}',
+      );
+      
+      await _persist();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Qarz qo\'shishda xatolik: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+  
+  // Get only regular customers (not debt-only ones)
+  List<Customer> getRegularCustomers() {
+    if (_farm == null) return [];
+    return _farm!.customers.where((c) => !c.name.startsWith('QARZ:')).toList();
+  }
+  
+  // Get only debt customers (for Debts screen)
+  List<Customer> getDebtOnlyCustomers() {
+    if (_farm == null) return [];
+    return _farm!.customers.where((c) => c.name.startsWith('QARZ:') && c.totalDebt > 0).toList();
+  }
+
+  Future<bool> addEggSaleWithCustomer({
+    required String customerName,
+    required String customerPhone,
+    required String customerAddress,
+    required int trayCount,
+    required double pricePerTray,
+    required double paidAmount,
+  }) async {
+    if (_farm == null) return false;
+    
+    // Check if enough stock is available
+    final currentStock = _farm!.egg?.currentStock ?? 0;
+    if (trayCount > currentStock) {
+      _error = 'Yetarli tuxum yo\'q! Mavjud: $currentStock fletka';
+      return false;
+    }
+    
+    try {
+      // First, add or find the customer
+      String? customerId;
+      final existingCustomer = _farm!.customers.where(
+        (c) => c.phone.replaceAll(RegExp(r'\s+'), '') == customerPhone.replaceAll(RegExp(r'\s+'), '')
+      ).firstOrNull;
+      
+      if (existingCustomer != null) {
+        // Update existing customer info if needed
+        await updateCustomerInfo(
+          existingCustomer.id,
+          name: customerName,
+          phone: customerPhone,
+          address: customerAddress.isNotEmpty ? customerAddress : null,
+        );
+        customerId = existingCustomer.id;
+      } else {
+        // Add new customer
+        _farm!.addCustomer(
+          customerName,
+          phone: customerPhone,
+          address: customerAddress.isNotEmpty ? customerAddress : null,
+        );
+        // Get the newly added customer's ID
+        customerId = _farm!.customers.last.id;
+      }
+      
+      // Reduce egg stock
+      _farm!.addEggSale(trayCount, pricePerTray, note: 'Sotildi: $customerName');
+      
+      // Calculate debt
+      final totalAmount = trayCount * pricePerTray;
+      final remainingDebt = totalAmount - paidAmount;
+      
+      // Add order to customer (as debt if not fully paid)
+      final deliveryDate = DateTime.now();
+      _farm!.addCustomerOrder(
+        customerId,
+        trayCount,
+        pricePerTray,
+        deliveryDate,
+        note: 'Tuxum sotildi. To\'landi: ${paidAmount.toStringAsFixed(0)} so\'m',
+      );
+      
+      // If fully paid, mark as paid
+      if (remainingDebt <= 0) {
+        final customer = _farm!.customers.firstWhere((c) => c.id == customerId);
+        final lastOrder = customer.orders.last;
+        _farm!.markCustomerOrderAsPaid(customerId, lastOrder.id);
+      }
+      
+      await _persist();
+      return true;
+    } catch (e) {
+      _error = 'Tuxum sotishda xatolik: $e';
+      return false;
+    }
+  }
+
+  // -----------------------------
+  // KUCHLI SAQLASH TIZIMI
+  // -----------------------------
+  Future<void> _persist() async {
+    if (_farm == null) return;
+    
+    bool hiveSuccess = false;
+    bool supabaseSuccess = false;
+    String? lastError;
+    
+    try {
+      // STEP 1: MAJBURIY lokal Hive saqlash
+      try {
+        await _saveToHive();
+        hiveSuccess = true;
+        print('✅ Ma\'lumotlar lokal Hive ga saqlandi');
+      } catch (hiveError) {
+        print('❌ Hive saqlashda xatolik: $hiveError');
+        lastError = 'Lokal saqlash xatosi: $hiveError';
+        
+        // Fallback: direct storage service
+        try {
+          await _storage.saveFarmOffline(_farm!);
+          hiveSuccess = true;
+          print('🔄 Rezerv Hive saqlash muvaffaqiyatli');
+        } catch (backupError) {
+          print('💥 Rezerv saqlash ham muvaffaqiyatsiz: $backupError');
+          lastError = 'KRITIK: Lokal ma\'lumotlar saqlanmadi: $backupError';
+        }
+      }
+      
+      // STEP 2: Activity Log qo'shish (agar Hive ishlasa)
+      if (hiveSuccess) {
+        try {
+          await _addActivityLog('Ma\'lumotlar saqlandi', 
+            'Farm ma\'lumotlari ${DateTime.now().toString().substring(0, 16)} da yangilandi');
+        } catch (activityError) {
+          print('⚠️ Activity log qo\'shishda xatolik: $activityError');
+          // Activity log xatosi asosiy jarayonni to'xtatmasin
+        }
+      }
+      
+      // STEP 3: Supabase sinxronizatsiya (agar offline bo'lmasa)
+      if (!_isOfflineMode && hiveSuccess) {
+        try {
+          await _syncToSupabaseWithRetry();
+          supabaseSuccess = true;
+          print('✅ Supabase sinxronizatsiyasi muvaffaqiyatli');
+        } catch (supabaseError) {
+          print('⚠️ Supabase sinxronizatsiyasida xatolik: $supabaseError');
+          // Supabase xatosi offline mode ga o'tishni belgilaydi
+          _isOfflineMode = true;
+          
+          if (hiveSuccess) {
+            print('📱 Offline rejimga o\'tish: ma\'lumotlar lokal saqlanadi');
+            lastError = null; // Clear error if local save succeeded
+          }
+        }
+      } else if (_isOfflineMode) {
+        print('📱 Offline rejimda: ma\'lumotlar faqat lokal saqlanadi');
+      }
+      
+      // SUCCESS: Agar hech bo'lmaganda lokal saqlash muvaffaqiyatli bo'lsa
+      if (hiveSuccess) {
+        _error = null; // Clear any previous errors
+        print('🎉 Ma\'lumotlar muvaffaqiyatli saqlandi (Hive: ✅, Supabase: ${supabaseSuccess ? "✅" : "❌"})');
+      } else {
+        _error = lastError ?? 'Noma\'lum saqlash xatosi';
+      }
+      
+    } catch (e) {
+      print('❌ _persist() da kutilmagan xatolik: $e');
+      _error = 'Ma\'lumotlarni saqlashda kutilmagan xatolik: $e';
+    } finally {
+      // Har doim listenerlarni xabardor qilish
       notifyListeners();
     }
   }
 
-  // Hive'ga saqlash
+  // RETRY MEXANIZMI BILAN SUPABASE SYNC
+  Future<void> _syncToSupabaseWithRetry({int maxRetries = 3}) async {
+    if (_farm == null) return;
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('🔄 Supabase ga sinxronizatsiya urinishi #$attempt...');
+        
+        // SODDA FARM MA'LUMOTLARINI SAQLASH (faqat mavjud maydonlar)
+        final farmData = {
+          'id': _farm!.id,
+          'owner_id': _farm!.ownerId,
+          'name': _farm!.name,
+          'description': _farm!.description,
+          // 'address' maydoni hozircha o'tkazilmaydi
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        
+        await _supabase.from('farms').upsert(farmData);
+        print('✅ Farm ma\'lumotlari Supabase ga saqlandi');
+        
+        // Customers ni saqlash
+        if (_farm!.customers.isNotEmpty) {
+          for (final customer in _farm!.customers) {
+            final customerData = {
+              'id': customer.id,
+              'farm_id': _farm!.id,
+              'name': customer.name,
+              'phone': customer.phone,
+              'address': customer.address,
+              'total_debt': customer.totalDebt,
+              'updated_at': DateTime.now().toIso8601String(),
+            };
+            
+            await _supabase.from('customers').upsert(customerData);
+            
+            // Orders ni saqlash
+            if (customer.orders.isNotEmpty) {
+              for (final order in customer.orders) {
+                final orderData = {
+                  'id': order.id,
+                  'customer_id': customer.id,
+                  'farm_id': _farm!.id,
+                  'tray_count': order.trayCount,
+                  'price_per_tray': order.pricePerTray,
+                  'total_amount': order.totalAmount,
+                  'delivery_date': order.deliveryDate.toIso8601String(),
+                  'is_paid': order.isPaid,
+                  'paid_at': order.paidAt?.toIso8601String(),
+                  'notes': order.note,
+                };
+                
+                await _supabase.from('orders').upsert(orderData);
+              }
+            }
+          }
+          print('✅ ${_farm!.customers.length} ta customer Supabase ga saqlandi');
+        }
+        
+        // Muvaffaqiyatli sync
+        await _storage.markDataAsSynced(_farm!.id);
+        print('✅ Supabase ga muvaffaqiyatli sinxronizatsiya!');
+        return;
+        
+      } catch (e) {
+        print('⚠️ Supabase sync urinishi #$attempt muvaffaqiyatsiz: $e');
+        
+        if (attempt == maxRetries) {
+          print('❌ Barcha sync urinishlari muvaffaqiyatsiz, offline rejimga o\'tish');
+          _isOfflineMode = true;
+          _error = null; // Don't show error for offline mode
+          
+          // Activity log qo'shish
+          await _addActivityLog('Sync xatosi', 
+            'Internet bilan aloqa yo\'q, offline rejimda davom etilmoqda');
+          
+          rethrow;
+        }
+        
+        // Keyingi urinishdan oldin biroz kutish
+        await Future.delayed(Duration(seconds: attempt * 2));
+      }
+    }
+  }
+  
+  Future<void> _saveToSupabase() async {
+    await _syncToSupabaseWithRetry();
+  }
+  
+  // ACTIVITY LOG QO'SHISH
+  Future<void> _addActivityLog(String title, String description) async {
+    try {
+      if (_farm == null) return;
+      
+      // ActivityLogService import qilmasdan to'g'ridan-to'g'ri activity log qo'shamiz
+      final activityId = '${_farm!.id.substring(0, 8)}-${DateTime.now().millisecondsSinceEpoch.toString().substring(0, 12)}-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+      
+      final activityData = {
+        'farm_id': _farm!.id, // ID ni olib tashladik, Supabase avtomatik yaratadi
+        'type': 'system',
+        'title': title,
+        'description': description,
+        'metadata': {'timestamp': DateTime.now().toIso8601String()},
+        'importance': 'normal',
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      
+      // Hive ga saqlash (ID yaratib)
+      final hiveActivityData = {
+        'id': activityId,
+        ...activityData,
+      };
+      
+      if (!Hive.isBoxOpen('activity_logs')) {
+        await Hive.openBox<Map>('activity_logs');
+      }
+      final activityBox = Hive.box<Map>('activity_logs');
+      await activityBox.put(activityId, hiveActivityData);
+      
+      // Supabase ga ham saqlash (offline bo'lmasa)
+      if (!_isOfflineMode) {
+        try {
+          await _supabase.from('activity_logs').insert(activityData);
+        } catch (e) {
+          // Activity log Supabase ga saqlanmasa ham davom etamiz
+          print('Activity log Supabase ga saqlanmadi: $e');
+        }
+      }
+      
+    } catch (e) {
+      print('Activity log qo\'shishda xatolik: $e');
+      // Activity log xatosi asosiy jarayonni to'xtatmasligi kerak
+    }
+  }
+
   Future<void> _saveToHive() async {
     if (_farm == null) return;
-
+    await _storage.saveFarmOffline(_farm!);
+  }
+  
+  Future<void> _loadFromHive() async {
     try {
-      await _storage.saveFarmOffline(_farm!);
+      final savedFarm = await _storage.loadFarmOffline(_farm?.id ?? '');
+      if (savedFarm != null) {
+        _farm = savedFarm;
+        print('Ma\'lumotlar offline dan yuklandi');
+        notifyListeners();
+      }
     } catch (e) {
-      _error = 'Ma\'lumotlarni saqlashda xatolik: $e';
-      notifyListeners();
+      print('Offline ma\'lumotlarni yuklashda xatolik: $e');
     }
   }
 
-  // Toggle offline mode
+  // -----------------------------
+  // Misc
+  // -----------------------------
   void setOfflineMode(bool offline) {
     _isOfflineMode = offline;
     notifyListeners();
   }
 
-  // Sync data when back online
-  Future<void> syncWhenOnline() async {
-    if (_farm != null && _isOfflineMode) {
-      try {
-        await _saveToSupabase();
-        _isOfflineMode = false;
-        notifyListeners();
-      } catch (e) {
-        print('Sync failed, staying offline: $e');
-      }
-    }
-  }
-
-  // Xatolik xabarini o'chirish
   void clearError() {
     _error = null;
     notifyListeners();
@@ -594,7 +858,7 @@ class FarmProvider with ChangeNotifier {
 
   @override
   void dispose() {
-    _farmStreamSub?.cancel();
+    stopRealtime();
     super.dispose();
   }
 }

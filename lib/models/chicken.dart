@@ -1,3 +1,4 @@
+//uzbekman
 import 'package:hive/hive.dart';
 import 'package:json_annotation/json_annotation.dart';
 
@@ -9,7 +10,9 @@ DateTime _parseDate(dynamic v) {
   if (v is String) {
     final asInt = int.tryParse(v);
     if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
-    try { return DateTime.parse(v); } catch (_) {}
+    try {
+      return DateTime.parse(v);
+    } catch (_) {}
   }
   return DateTime.now();
 }
@@ -38,11 +41,12 @@ class Chicken {
     List<ChickenDeath>? deaths,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : deaths = deaths ?? [],
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : deaths = deaths ?? [],
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
-  factory Chicken.fromJson(Map<String, dynamic> json) => _$ChickenFromJson(json);
+  factory Chicken.fromJson(Map<String, dynamic> json) =>
+      _$ChickenFromJson(json);
 
   Map<String, dynamic> toJson() => _$ChickenToJson(this);
 
@@ -56,9 +60,12 @@ class Chicken {
   int get todayDeaths {
     DateTime today = DateTime.now();
     return deaths
-        .where((death) => death.date.year == today.year &&
-            death.date.month == today.month &&
-            death.date.day == today.day)
+        .where(
+          (death) =>
+              death.date.year == today.year &&
+              death.date.month == today.month &&
+              death.date.day == today.day,
+        )
         .fold(0, (sum, death) => sum + death.count);
   }
 
@@ -88,40 +95,45 @@ class Chicken {
     int mostCount = daily[mostDay] ?? 0;
     int leastCount = daily[leastDay] ?? 0;
     daily.forEach((day, count) {
-      if (count > mostCount) { mostDay = day; mostCount = count; }
-      if (count < leastCount) { leastDay = day; leastCount = count; }
+      if (count > mostCount) {
+        mostDay = day;
+        mostCount = count;
+      }
+      if (count < leastCount) {
+        leastDay = day;
+        leastCount = count;
+      }
     });
 
     return {
       'totalDeaths': totalDeaths,
-      'mostDeathsDay': {
-        'date': mostDay,
-        'count': mostCount,
-      },
-      'leastDeathsDay': {
-        'date': leastDay,
-        'count': leastCount,
-      },
+      'mostDeathsDay': {'date': mostDay, 'count': mostCount},
+      'leastDeathsDay': {'date': leastDay, 'count': leastCount},
       'averageDeaths': averageDeaths,
     };
   }
 
   // O'lim qo'shish
   void addDeath(int count) {
-    deaths.add(ChickenDeath(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      count: count,
-      date: DateTime.now(),
-    ));
+    deaths.add(
+      ChickenDeath(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        count: count,
+        date: DateTime.now(),
+      ),
+    );
     updatedAt = DateTime.now();
   }
 
   // O'limni o'chirish (faqat bugungi)
   void removeTodayDeath() {
     DateTime today = DateTime.now();
-    deaths.removeWhere((death) => death.date.year == today.year &&
-        death.date.month == today.month &&
-        death.date.day == today.day);
+    deaths.removeWhere(
+      (death) =>
+          death.date.year == today.year &&
+          death.date.month == today.month &&
+          death.date.day == today.day,
+    );
     updatedAt = DateTime.now();
   }
 
@@ -164,8 +176,8 @@ class ChickenDeath {
     this.note,
   });
 
-  factory ChickenDeath.fromJson(Map<String, dynamic> json) => 
+  factory ChickenDeath.fromJson(Map<String, dynamic> json) =>
       _$ChickenDeathFromJson(json);
-      
+
   Map<String, dynamic> toJson() => _$ChickenDeathToJson(this);
-} 
+}

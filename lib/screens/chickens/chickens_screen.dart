@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/farm_provider.dart';
 import '../../utils/constants.dart';
+import '../../utils/app_theme.dart';
 import '../../widgets/stat_card.dart';
 
 class ChickensScreen extends StatefulWidget {
@@ -17,7 +18,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tovuqlar'),
-        backgroundColor: AppConstants.primaryColor,
+        backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -37,10 +38,10 @@ class _ChickensScreenState extends State<ChickensScreen> {
                   padding: const EdgeInsets.all(AppConstants.largePadding),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        AppConstants.primaryColor,
-                        AppConstants.primaryColor.withOpacity(0.8),
-                      ],
+                    colors: [
+                      AppTheme.primaryColor,
+                      AppTheme.primaryColor.withOpacity(0.8),
+                    ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -105,7 +106,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
                         icon: const Icon(Icons.add),
                         label: const Text('Tovuq Qo\'shish'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConstants.primaryColor,
+                          backgroundColor: AppTheme.primaryColor,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),

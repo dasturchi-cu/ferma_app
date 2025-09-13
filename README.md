@@ -1,4 +1,4 @@
-# fermani_api
+// alo# fermani_api
 
 Minimal, lo‘nda va amaliy README. Ilova tovuq fermasi uchun kirim-chiqim va qarzlarni yuritishga mo‘ljallangan.
 

@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+part 'inventory.g.dart';
 
 @HiveType(typeId: 13)
 class InventoryItem extends HiveObject {

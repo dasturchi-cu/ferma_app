@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/farm.dart';
 import '../models/egg.dart';
 import '../models/chicken.dart';
+import '../models/customer.dart';
 // Removed unused import
 import '../services/storage_service.dart';
 import '../config/supabase_config.dart';
+import 'dart:async';
 
 class AuthProvider with ChangeNotifier {
   final StorageService _storage = StorageService();
   final SupabaseClient _supabase = SupabaseConfig.client;
+  
+  // STREAM SUBSCRIPTION FOR PROPER DISPOSAL
+  StreamSubscription<AuthState>? _authSubscription;
 
   User? _user;
   Farm? _farm;
@@ -27,6 +33,46 @@ class AuthProvider with ChangeNotifier {
 
   AuthProvider() {
     _init();
+    _checkSavedLogin();
+  }
+  
+  // Check if user was previously logged in
+  Future<void> _checkSavedLogin() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedEmail = prefs.getString('saved_email');
+      final savedUserId = prefs.getString('saved_user_id');
+      final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+      
+      if (isLoggedIn && savedEmail != null && savedUserId != null) {
+        // Try to load offline data while checking online status
+        final offlineFarm = await _storage.loadFarmOffline(savedUserId);
+        if (offlineFarm != null) {
+          _farm = offlineFarm;
+          _isOfflineMode = true;
+          notifyListeners();
+        }
+        
+        // Try to refresh session in background
+        _refreshSession();
+      }
+    } catch (e) {
+      print('Error checking saved login: $e');
+    }
+  }
+  
+  Future<void> _refreshSession() async {
+    try {
+      await _supabase.auth.refreshSession();
+      final currentSession = _supabase.auth.currentSession;
+      if (currentSession != null) {
+        _user = currentSession.user;
+        _isOfflineMode = false;
+        await _loadFarmData();
+      }
+    } catch (e) {
+      print('Session refresh failed, staying offline: $e');
+    }
   }
 
   // Initialize offline mode check
@@ -54,14 +100,28 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> _init() async {
-    _supabase.auth.onAuthStateChange.listen((AuthState data) async {
-      _user = data.session?.user;
-      if (_user != null) {
-        await _loadFarmData();
-      } else {
-        _farm = null;
+    // DISPOSE PREVIOUS SUBSCRIPTION IF EXISTS
+    await _authSubscription?.cancel();
+    
+    // SET UP NEW SUBSCRIPTION WITH PROPER ERROR HANDLING
+    _authSubscription = _supabase.auth.onAuthStateChange.listen((AuthState data) async {
+      try {
+        _user = data.session?.user;
+        if (_user != null) {
+          await _loadFarmData();
+        } else {
+          _farm = null;
+        }
+        if (mounted) {
+          notifyListeners();
+        }
+      } catch (e) {
+        print('Auth state change error: $e');
+        // Don't let auth state errors crash the app
       }
-      notifyListeners();
+    }, onError: (error) {
+      print('Auth stream error: $error');
+      // Handle stream errors gracefully
     });
 
     // Check current session
@@ -71,46 +131,84 @@ class AuthProvider with ChangeNotifier {
       await _loadFarmData();
     }
   }
+  
+  // CHECK IF STILL MOUNTED TO PREVENT MEMORY LEAKS
+  bool get mounted => hasListeners;
+  
+  // PROPER DISPOSAL OF RESOURCES
+  @override
+  void dispose() {
+    print('🧹 AuthProvider dispose qilinmoqda...');
+    
+    // Cancel auth subscription
+    _authSubscription?.cancel();
+    _authSubscription = null;
+    
+    // Clear data
+    _user = null;
+    _farm = null;
+    
+    super.dispose();
+    print('✅ AuthProvider dispose qilindi');
+  }
 
   Future<void> _loadFarmData() async {
     if (_user == null) return;
 
     try {
       _isLoading = true;
-      notifyListeners();
+      if (mounted) notifyListeners();
 
-      // Try to load from Supabase
+      // Try to load from Supabase with timeout
       try {
         final response = await _supabase
             .from('farms')
             .select()
             .eq('id', _user!.id)
-            .single();
+            .single()
+            .timeout(Duration(seconds: 10)); // Add timeout
 
-        _farm = Farm.fromJson(response);
-        await _saveToHive();
+        if (mounted) {
+          _farm = Farm.fromJson(response);
+          await _saveToHive();
+          _isOfflineMode = false;
+        }
       } catch (e) {
-        // If farm doesn't exist, create a new one
-        _farm = Farm(
-          id: _user!.id,
-          name: 'Mening Fermam',
-          ownerId: _user!.id,
-          chicken: Chicken(id: _user!.id, totalCount: 0, deaths: const []),
-          egg: Egg(id: _user!.id),
-          customers: const [],
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-        await _saveToSupabase();
-        await _saveToHive();
+        print('Supabase dan yuklashda xatolik: $e');
+        
+        // Try to load from Hive first
+        await _loadFromHive();
+        
+        // If no offline data, create new farm
+        if (_farm == null && mounted) {
+          _farm = Farm(
+            id: _user!.id,
+            name: 'Mening Fermam',
+            ownerId: _user!.id,
+            chicken: Chicken(id: _user!.id, totalCount: 0, deaths: const []),
+            egg: Egg(id: _user!.id),
+            customers: <Customer>[],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          await _saveToSupabase();
+          await _saveToHive();
+        }
+        
+        _isOfflineMode = true;
       }
     } catch (e) {
-      _error = 'Ma\'lumotlarni yuklashda xatolik: $e';
-      // Try to load from Hive
-      await _loadFromHive();
+      print('Critical load error: $e');
+      if (mounted) {
+        _error = 'Ma\'lumotlarni yuklashda xatolik: $e';
+        // Try to load from Hive as last resort
+        await _loadFromHive();
+      }
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (mounted) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -177,7 +275,7 @@ class AuthProvider with ChangeNotifier {
             deaths: const [],
           ),
           egg: Egg(id: response.user!.id),
-          customers: const [],
+          customers: <Customer>[],
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -186,7 +284,7 @@ class AuthProvider with ChangeNotifier {
         await _saveToHive();
 
         // Save login state
-        await _storage.saveLoginState(userId: response.user!.id, email: email);
+        await _saveLoginState(response.user!.id, email);
 
         return true;
       }
@@ -217,7 +315,7 @@ class AuthProvider with ChangeNotifier {
 
       if (response.user != null) {
         // Save login state
-        await _storage.saveLoginState(userId: response.user!.id, email: email);
+        await _saveLoginState(response.user!.id, email);
       }
 
       return true;
@@ -239,7 +337,7 @@ class AuthProvider with ChangeNotifier {
       await _supabase.auth.signOut();
       _user = null;
       _farm = null;
-      await _storage.clearLoginState();
+      await _clearLoginState();
     } catch (e) {
       _error = 'Chiqishda xatolik: $e';
     } finally {
@@ -267,6 +365,30 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+  
+  // Save login state to SharedPreferences
+  Future<void> _saveLoginState(String userId, String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('saved_user_id', userId);
+      await prefs.setString('saved_email', email);
+      await prefs.setBool('is_logged_in', true);
+    } catch (e) {
+      print('Error saving login state: $e');
+    }
+  }
+  
+  // Clear login state from SharedPreferences
+  Future<void> _clearLoginState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('saved_user_id');
+      await prefs.remove('saved_email');
+      await prefs.setBool('is_logged_in', false);
+    } catch (e) {
+      print('Error clearing login state: $e');
+    }
+  }
 
   // Ferma nomini yangilash
   Future<void> updateFarmName(String newName) async {
@@ -274,6 +396,57 @@ class AuthProvider with ChangeNotifier {
       _farm = _farm!.copyWith(name: newName, updatedAt: DateTime.now());
       await _saveToSupabase();
       await _saveToHive();
+      notifyListeners();
+    }
+  }
+
+  // Check and refresh authentication status
+  Future<void> checkAuthStatus() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Get current session
+      final currentSession = _supabase.auth.currentSession;
+      
+      if (currentSession == null) {
+        _user = null;
+        _farm = null;
+        return;
+      }
+
+      // Check if session is expired
+      final now = DateTime.now().toUtc();
+      // Convert expiresAt timestamp to DateTime
+      final expiresAt = currentSession.expiresAt != null 
+          ? DateTime.fromMillisecondsSinceEpoch(currentSession.expiresAt! * 1000).toUtc()
+          : now.add(const Duration(days: 1));
+      
+      if (expiresAt.isBefore(now)) {
+        // Session expired, try to refresh
+        try {
+          final response = await _supabase.auth.refreshSession();
+          _user = response.session?.user;
+          
+          if (_user != null) {
+            await _loadFarmData();
+          } else {
+            _farm = null;
+          }
+        } catch (e) {
+          // If refresh fails, sign out
+          await signOut();
+        }
+      } else if (_user == null) {
+        // We have a valid session but no user object
+        _user = currentSession.user;
+        await _loadFarmData();
+      }
+    } catch (e) {
+      _error = 'Auth status check failed: $e';
+      debugPrint('Auth status check error: $e');
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }

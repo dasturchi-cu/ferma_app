@@ -12,37 +12,95 @@ class SupabaseConfig {
   /// Private constructor to prevent instantiation
   SupabaseConfig._();
   
-  /// Initialize Supabase client
-  static Future<void> initialize() async {
+  /// KUCHLI SUPABASE INITIALIZATION
+  static Future<void> initialize({int maxRetries = 3}) async {
     if (_isInitialized) return;
     
-    try {
-      await Supabase.initialize(
-        url: _supabaseUrl,
-        anonKey: _supabaseAnonKey,
-        authOptions: const FlutterAuthClientOptions(
-          authFlowType: AuthFlowType.pkce,
-        ),
-        storageOptions: const StorageClientOptions(
-          retryAttempts: 5,
-        ),
-        realtimeClientOptions: const RealtimeClientOptions(
-          eventsPerSecond: 20,
-        ),
-        debug: !kReleaseMode,
-      );
-      
-      _client = Supabase.instance.client;
-      _isInitialized = true;
-      
-      if (kDebugMode) {
-        debugPrint('✅ Supabase initialized successfully');
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        debugPrint('🔄 Supabase initialization urinishi #$attempt...');
+        
+        await Supabase.initialize(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          authOptions: const FlutterAuthClientOptions(
+            authFlowType: AuthFlowType.pkce,
+          ),
+          storageOptions: const StorageClientOptions(
+            retryAttempts: 10, // Ko'proq retry
+          ),
+          realtimeClientOptions: const RealtimeClientOptions(
+            eventsPerSecond: 10,
+          ),
+          debug: !kReleaseMode,
+        );
+        
+        _client = Supabase.instance.client;
+        
+        // Connection test
+        await _testConnection();
+        
+        _isInitialized = true;
+        debugPrint('✅ Supabase muvaffaqiyatli ishga tushdi');
+        return;
+        
+      } catch (e, stackTrace) {
+        debugPrint('⚠️ Supabase init urinishi #$attempt muvaffaqiyatsiz: $e');
+        
+        if (attempt == maxRetries) {
+          debugPrint('❌ Barcha Supabase init urinishlari muvaffaqiyatsiz');
+          _isInitialized = false;
+          _handleError(e, stackTrace);
+          
+          // Don't throw - allow app to work offline
+          debugPrint('📱 Offline rejimda davom etish...');
+          return;
+        }
+        
+        // Wait before retry
+        await Future.delayed(Duration(seconds: attempt * 2));
       }
-    } catch (e, stackTrace) {
-      _isInitialized = false;
-      _handleError(e, stackTrace);
-      rethrow;
     }
+  }
+  
+  /// TEST CONNECTION
+  static Future<void> _testConnection() async {
+    try {
+      // Simple health check query
+      await _client.from('farms').select('id').limit(1).withConverter((data) => data);
+      debugPrint('🌐 Supabase aloqasi tasdiqlandi');
+    } catch (e) {
+      debugPrint('⚡ Supabase aloqa testi muvaffaqiyatsiz: $e');
+      // Still allow initialization to proceed
+    }
+  }
+  
+  /// NETWORK-SAFE QUERY WRAPPER
+  static Future<T> safeQuery<T>(
+    Future<T> Function() query, {
+    T? defaultValue,
+    int maxRetries = 3,
+  }) async {
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await query();
+      } catch (e) {
+        debugPrint('🚫 Query attempt #$attempt failed: $e');
+        
+        if (attempt == maxRetries) {
+          debugPrint('❌ Barcha query urinishlari muvaffaqiyatsiz');
+          if (defaultValue != null) {
+            debugPrint('💾 Default qiymat qaytarilmoqda');
+            return defaultValue;
+          }
+          rethrow;
+        }
+        
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      }
+    }
+    
+    throw Exception('Unreachable code');
   }
   
   /// Get Supabase client instance

@@ -122,8 +122,12 @@ class Egg {
       0,
       (sum, broken) => sum + broken.trayCount,
     );
-    // Large eggs are a subset of production and should not be double-counted
-    return totalProduction - totalSales - totalBroken;
+    int totalLarge = largeEggs.fold(
+      0,
+      (sum, large) => sum + large.trayCount,
+    );
+    // Katta tuxumlar alohida chiqarilishi kerak
+    return totalProduction - totalSales - totalBroken - totalLarge;
   }
 
   // Oxirgi N kun uchun ishlab chiqarish yig'indisi

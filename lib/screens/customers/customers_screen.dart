@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/farm_provider.dart';
 import '../../utils/constants.dart';
+import '../../utils/app_theme.dart';
 import '../../models/customer.dart';
 
 class CustomersScreen extends StatefulWidget {
@@ -22,9 +23,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
         elevation: 0,
       ),
       body: Consumer<FarmProvider>(
-        builder: (context, farmProvider, child) {
-          final farm = farmProvider.farm;
-          final customers = farm?.customers ?? [];
+      builder: (context, farmProvider, child) {
+        final farm = farmProvider.farm;
+        final customers = farmProvider.getRegularCustomers(); // Only regular customers
 
           return Column(
             children: [
@@ -35,8 +36,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppConstants.primaryColor,
-                      AppConstants.primaryColor.withOpacity(0.85),
+                      AppTheme.primaryColor,
+                      AppTheme.primaryColor.withOpacity(0.85),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -78,7 +79,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           Expanded(
                             child: _buildHeaderStat(
                               'Umumiy qarzdorlik',
-                              '${customers.fold(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)} so\'m',
+                              '${customers.fold<double>(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)} so\'m',
                               Icons.money_off,
                             ),
                           ),
@@ -199,8 +200,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       case 'edit':
                         _showEditCustomerDialog(context, customer);
                         break;
-                      case 'order':
-                        _showAddOrderDialog(context, customer);
+                      case 'egg_sale':
+                        _showEggSaleDialog(context, customer);
                         break;
                       case 'delete':
                         _showDeleteCustomerDialog(context, customer);
@@ -217,10 +218,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                     ),
                     const PopupMenuItem(
-                      value: 'order',
+                      value: 'egg_sale',
                       child: ListTile(
-                        leading: Icon(Icons.add_shopping_cart),
-                        title: Text('Buyurtma Qo\'shish'),
+                        leading: Icon(Icons.egg),
+                        title: Text('Tuxum Sotish'),
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
@@ -320,9 +321,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _showAddOrderDialog(context, customer),
-                    icon: const Icon(Icons.add_shopping_cart),
-                    label: const Text('Buyurtma'),
+                    onPressed: () => _showEggSaleDialog(context, customer),
+                    icon: const Icon(Icons.egg),
+                    label: const Text('Tuxum Sotish'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppConstants.accentColor,
                     ),
@@ -779,71 +780,325 @@ class _CustomersScreenState extends State<CustomersScreen> {
   void _showCustomerOrdersDialog(BuildContext context, Customer customer) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${customer.name} buyurtmalari'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: customer.orders.isEmpty
-              ? const Text('Hali buyurtmalar yo\'q')
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: customer.orders.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final order = customer.orders.reversed.toList()[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: order.isPaid
-                            ? AppConstants.successColor.withOpacity(0.1)
-                            : AppConstants.warningColor.withOpacity(0.1),
-                        child: Icon(
-                          order.isPaid ? Icons.check : Icons.schedule,
-                          color: order.isPaid
-                              ? AppConstants.successColor
-                              : AppConstants.warningColor,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppConstants.accentColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.history,
+                      color: AppConstants.accentColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          customer.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      title: Text('${order.trayCount} fletka'),
-                      subtitle: Text(
-                        '${order.deliveryDate.day}.${order.deliveryDate.month}.${order.deliveryDate.year}',
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${order.totalAmount.toStringAsFixed(0)} so\'m',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        Text(
+                          'Buyurtmalar tarixi',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
                           ),
-                          Text(
-                            order.isPaid ? 'To\'landi' : 'To\'lanmagan',
-                            style: TextStyle(
-                              color: order.isPaid
-                                  ? AppConstants.successColor
-                                  : AppConstants.errorColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      onTap: order.isPaid
-                          ? null
-                          : () {
-                              Navigator.pop(context);
-                              _showMarkAsPaidDialog(context, customer, order);
-                            },
-                    );
-                  },
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Statistics
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
                 ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Yopish'),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildOrderStat(
+                        'Jami',
+                        '${customer.orders.length}',
+                        Icons.shopping_cart,
+                        AppConstants.infoColor,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildOrderStat(
+                        'To\'langan',
+                        '${customer.orders.where((o) => o.isPaid).length}',
+                        Icons.check_circle,
+                        AppConstants.successColor,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildOrderStat(
+                        'Qarzdorlik',
+                        '${customer.totalDebt.toStringAsFixed(0)} so\'m',
+                        Icons.money_off,
+                        AppConstants.errorColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Orders list
+              Expanded(
+                child: customer.orders.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.inbox,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Hali buyurtmalar yo\'q',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: customer.orders.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final order = customer.orders.reversed.toList()[index];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 2),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: order.isPaid
+                                    ? [AppConstants.successColor.withOpacity(0.1), Colors.green.withOpacity(0.05)]
+                                    : [AppConstants.errorColor.withOpacity(0.1), Colors.orange.withOpacity(0.05)],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: order.isPaid
+                                    ? AppConstants.successColor.withOpacity(0.3)
+                                    : AppConstants.errorColor.withOpacity(0.3),
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (order.isPaid ? Colors.green : Colors.orange).withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Header
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: order.isPaid
+                                                ? [AppConstants.successColor, Colors.green[600]!]
+                                                : [AppConstants.errorColor, Colors.orange[600]!],
+                                          ),
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: (order.isPaid ? Colors.green : Colors.orange).withOpacity(0.3),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Icon(
+                                          order.isPaid ? Icons.check_circle : Icons.access_time,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              order.trayCount > 0 
+                                                  ? '${order.trayCount} fletka tuxum'
+                                                  : 'Qo\'lda qo\'shilgan qarz',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              _formatDateTime(order.deliveryDate),
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Text(
+                                            '${order.totalAmount.toStringAsFixed(0)} so\'m',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          Text(
+                                            order.isPaid ? 'To\'landi' : 'Qarzdorlik',
+                                            style: TextStyle(
+                                              color: order.isPaid
+                                                  ? AppConstants.successColor
+                                                  : AppConstants.errorColor,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  
+                                  // Order details
+                                  if (order.note?.isNotEmpty ?? false)
+                                    const SizedBox(height: 12),
+                                  if (order.note?.isNotEmpty ?? false)
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        order.note!,
+                                        style: TextStyle(
+                                          color: Colors.grey[700],
+                                          fontSize: 12,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
+                                  
+                                  // Actions
+                                  if (!order.isPaid)
+                                    const SizedBox(height: 12),
+                                  if (!order.isPaid)
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _showMarkAsPaidDialog(context, customer, order);
+                                        },
+                                        icon: const Icon(Icons.payment, size: 16),
+                                        label: const Text('To\'lash'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppConstants.successColor,
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
+  }
+  
+  Widget _buildOrderStat(String title, String value, IconData icon, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        Text(
+          title,
+          style: TextStyle(
+            color: Colors.grey[600],
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+  
+  String _formatDateTime(DateTime dateTime) {
+    final months = [
+      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+    ];
+    
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = months[dateTime.month - 1];
+    final year = dateTime.year;
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    
+    return '$day $month $year, $hour:$minute';
   }
 
   void _showMarkAsPaidDialog(
@@ -897,6 +1152,171 @@ class _CustomersScreenState extends State<CustomersScreen> {
             ),
             child: const Text(
               'Tasdiqlash',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEggSaleDialog(BuildContext context, Customer customer) {
+    final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+    final currentStock = farmProvider.farm?.egg?.currentStock ?? 0;
+    final trayController = TextEditingController();
+    final priceController = TextEditingController(text: '10000');
+    final totalController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    void calculateTotal() {
+      final count = int.tryParse(trayController.text) ?? 0;
+      final price = double.tryParse(priceController.text) ?? 0.0;
+      final total = count * price;
+      totalController.text = total > 0 ? total.toStringAsFixed(0) : '';
+    }
+
+    // Listen to changes in count and price fields
+    trayController.addListener(calculateTotal);
+    priceController.addListener(calculateTotal);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${customer.name} ga tuxum sotish'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.inventory, color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Mavjud zaxira: $currentStock fletka',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: trayController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Sotilgan fletka soni',
+                  border: OutlineInputBorder(),
+                  suffixText: 'fletka',
+                ),
+                validator: (v) {
+                  final t = v?.trim() ?? '';
+                  final n = int.tryParse(t);
+                  if (n == null || n <= 0) {
+                    return 'Fletka sonini to\'g\'ri kiriting';
+                  }
+                  if (n > currentStock) {
+                    return 'Yetarli zaxira yo\'q (Mavjud: $currentStock)';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Fletka narxi',
+                  border: OutlineInputBorder(),
+                  suffixText: "so'm",
+                ),
+                validator: (v) {
+                  final t = (v ?? '').replaceAll(',', '.');
+                  final d = double.tryParse(t);
+                  if (d == null || d <= 0) return 'Narxni to\'g\'ri kiriting';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: totalController,
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: 'Umumiy summa (mijozning qarzi)',
+                  border: const OutlineInputBorder(),
+                  suffixText: "so'm",
+                  filled: true,
+                  fillColor: Colors.red.withOpacity(0.1),
+                ),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Bu summa mijozning sizga qarzi bo\'lib qo\'shiladi',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Bekor qilish'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                final count = int.parse(trayController.text);
+                final price = double.parse(priceController.text);
+                
+                final success = await farmProvider.addCustomerEggSale(
+                  customer.id,
+                  count,
+                  price,
+                );
+
+                Navigator.pop(context);
+
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${customer.name} ga $count fletka tuxum sotildi. Qarz: ${(count * price).toStringAsFixed(0)} so\'m',
+                      ),
+                      backgroundColor: AppConstants.successColor,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                      backgroundColor: AppConstants.errorColor,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConstants.accentColor,
+            ),
+            child: const Text(
+              'Sotish',
               style: TextStyle(color: Colors.white),
             ),
           ),

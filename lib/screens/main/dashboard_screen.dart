@@ -1,10 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../utils/app_theme.dart';
+import '../../providers/farm_provider.dart';
+import '../../widgets/activity_log_widget.dart';
+import '../../providers/auth_provider.dart';
 
-class ModernDashboard extends StatelessWidget {
+class ModernDashboard extends StatefulWidget {
   final void Function(int index)? onTabSelected;
   const ModernDashboard({super.key, this.onTabSelected});
+
+  @override
+  State<ModernDashboard> createState() => _ModernDashboardState();
+}
+
+class _ModernDashboardState extends State<ModernDashboard> {
+  bool _isRealtimeActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to farm provider changes to detect realtime updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+      farmProvider.addListener(_onFarmDataChanged);
+    });
+  }
+
+  void _onFarmDataChanged() {
+    if (mounted) {
+      setState(() {
+        _isRealtimeActive = true;
+      });
+
+      // Reset the indicator after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _isRealtimeActive = false;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // SAFE DISPOSE - Remove listener to prevent memory leaks
+    try {
+      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+      farmProvider.removeListener(_onFarmDataChanged);
+      print('🧹 Dashboard listener removed');
+    } catch (e) {
+      print('! Dashboard dispose error: $e');
+      // Continue with disposal even if error occurs
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,11 +73,77 @@ class ModernDashboard extends StatelessWidget {
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,
         centerTitle: true,
+        actions: [
+          // Realtime indicator
+          if (_isRealtimeActive)
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Live',
+                    style: GoogleFonts.poppins(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // Offline mode indicator
+          Consumer<FarmProvider>(
+            builder: (context, farmProvider, child) {
+              if (farmProvider.isOfflineMode) {
+                return Container(
+                  margin: const EdgeInsets.only(right: 16),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Offline',
+                        style: GoogleFonts.poppins(
+                          color: AppTheme.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
           // Stats Overview
-          _buildStatsOverview(),
+          Consumer<FarmProvider>(
+            builder: (context, farmProvider, child) {
+              return _buildStatsOverview(farmProvider.farm);
+            },
+          ),
 
           // Main Content
           Expanded(
@@ -79,7 +197,18 @@ class ModernDashboard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    _buildRecentActivities(),
+                    Consumer<AuthProvider>(
+                      builder: (context, authProvider, child) {
+                        if (authProvider.farm?.id != null) {
+                          return ActivityLogWidget(
+                            farmId: authProvider.farm!.id,
+                            maxItems: 10,
+                            height: 350,
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -92,18 +221,25 @@ class ModernDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsOverview() {
+  Widget _buildStatsOverview(farm) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: AppTheme.heroGradient,
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primaryColor,
+            AppTheme.primaryColor.withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: AppTheme.primaryColor.withOpacity(0.3),
-            blurRadius: 15,
+            blurRadius: 151,
             offset: const Offset(0, 5),
           ),
         ],
@@ -123,9 +259,21 @@ class ModernDashboard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatItem('Tuxum', '—', Icons.egg_outlined),
-              _buildStatItem('Mijozlar', '—', Icons.people_outline),
-              _buildStatItem('Qarz', '—', Icons.receipt_long_outlined),
+              _buildStatItem(
+                'Tuxum',
+                '${farm?.egg?.currentStock ?? 0}',
+                Icons.egg_outlined,
+              ),
+              _buildStatItem(
+                'Mijozlar',
+                '${farm?.customers.length ?? 0}',
+                Icons.people_outline,
+              ),
+              _buildStatItem(
+                'Qarz',
+                '${_calculateTotalDebt(farm?.customers ?? [])}',
+                Icons.receipt_long_outlined,
+              ),
             ],
           ),
         ],
@@ -219,25 +367,25 @@ class ModernDashboard extends StatelessWidget {
           Icons.add_circle_outline,
           'Tuxum Qo\'shish',
           AppTheme.primaryColor,
-          onTap: () => onTabSelected?.call(2),
+          onTap: () => widget.onTabSelected?.call(2),
         ),
         _buildActionButton(
           Icons.person_add_alt_1_outlined,
           'Mijoz Qo\'shish',
           AppTheme.secondaryColor,
-          onTap: () => onTabSelected?.call(1),
+          onTap: () => widget.onTabSelected?.call(1),
         ),
         _buildActionButton(
           Icons.receipt_long_outlined,
           'Qarz Qo\'shish',
           AppTheme.accentColor,
-          onTap: () => onTabSelected?.call(4),
+          onTap: () => widget.onTabSelected?.call(4),
         ),
         _buildActionButton(
           Icons.analytics_outlined,
           'Hisobot',
           AppTheme.tertiaryColor,
-          onTap: () => onTabSelected?.call(3),
+          onTap: () => widget.onTabSelected?.call(3),
         ),
       ],
     );
@@ -367,23 +515,28 @@ class ModernDashboard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           GestureDetector(
-            onTap: () => onTabSelected?.call(0),
+            onTap: () => widget.onTabSelected?.call(0),
             child: _buildNavItem(Icons.home_rounded, 'Asosiy', true),
           ),
           GestureDetector(
-            onTap: () => onTabSelected?.call(1),
+            onTap: () => widget.onTabSelected?.call(1),
             child: _buildNavItem(Icons.people_alt_rounded, 'Mijozlar', false),
           ),
           GestureDetector(
-            onTap: () => onTabSelected?.call(2),
+            onTap: () => widget.onTabSelected?.call(2),
             child: _buildNavItem(Icons.egg_alt_rounded, 'Tuxum', false),
           ),
           GestureDetector(
-            onTap: () => onTabSelected?.call(3),
+            onTap: () => widget.onTabSelected?.call(3),
             child: _buildNavItem(Icons.receipt_long_rounded, 'Hisobot', false),
           ),
         ],
       ),
     );
+  }
+
+  // Helper method to calculate total debt
+  double _calculateTotalDebt(List customers) {
+    return customers.fold(0.0, (sum, customer) => sum + customer.totalDebt);
   }
 }

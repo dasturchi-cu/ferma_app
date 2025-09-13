@@ -151,8 +151,13 @@ class Farm {
 
   // Customer management methods
   void addCustomer(String name, {String? phone, String? address}) {
+    // Generate a proper UUID-like ID using timestamp and random components
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = (timestamp % 10000).toString().padLeft(4, '0');
+    final customerId = '${timestamp.toRadixString(16)}-$random-4000-8000-${timestamp.toRadixString(16).padLeft(12, '0')}'.substring(0, 36);
+    
     final customer = Customer(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: customerId,
       name: name,
       phone: phone ?? '',
       address: address ?? '',

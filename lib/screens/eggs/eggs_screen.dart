@@ -809,19 +809,214 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   }
 
   void _showAddSaleDialog(BuildContext context) {
-    final controller = TextEditingController();
+    final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+    final currentStock = farmProvider.farm?.egg?.currentStock ?? 0;
+    
+    // Controllers
+    final trayController = TextEditingController();
+    final priceController = TextEditingController(text: '10000');
+    final totalController = TextEditingController();
+    final paidController = TextEditingController();
+    final remainingController = TextEditingController();
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    void _calculateAmounts() {
+      final count = int.tryParse(trayController.text) ?? 0;
+      final price = double.tryParse(priceController.text) ?? 0.0;
+      final paid = double.tryParse(paidController.text) ?? 0.0;
+      final total = count * price;
+      final remaining = total - paid;
+      
+      totalController.text = total > 0 ? total.toStringAsFixed(0) : '';
+      remainingController.text = remaining != 0 ? remaining.toStringAsFixed(0) : '0';
+    }
+
+    // Listen to changes
+    trayController.addListener(_calculateAmounts);
+    priceController.addListener(_calculateAmounts);
+    paidController.addListener(_calculateAmounts);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Tuxum Sotish'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Sotilgan fletka soni',
-            border: OutlineInputBorder(),
-            suffixText: 'fletka',
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.inventory, color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Mavjud zaxira: $currentStock fletka',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Mijoz ma'lumotlari
+                const Text(
+                  'Mijoz ma\'lumotlari',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Mijoz ismi',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  validator: (v) => (v?.trim().isEmpty ?? true) ? 'Ism kiritish majburiy' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Telefon raqami',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.phone),
+                  ),
+                  validator: (v) {
+                    if (v?.trim().isEmpty ?? true) return 'Telefon kiritish majburiy';
+                    final digits = v!.replaceAll(RegExp(r'\D'), '');
+                    if (digits.length < 7) return 'Telefon raqami juda qisqa';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: addressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Manzil (ixtiyoriy)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_on),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Tuxum ma'lumotlari
+                const Text(
+                  'Tuxum ma\'lumotlari',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: trayController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Sotilgan fletka soni',
+                    border: OutlineInputBorder(),
+                    suffixText: 'fletka',
+                  ),
+                  validator: (v) {
+                    final n = int.tryParse(v ?? '');
+                    if (n == null || n <= 0) return 'To\'g\'ri son kiriting';
+                    if (n > currentStock) return 'Yetarli zaxira yo\'q';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Fletka narxi',
+                    border: OutlineInputBorder(),
+                    suffixText: "so'm",
+                  ),
+                  validator: (v) {
+                    final d = double.tryParse(v ?? '');
+                    if (d == null || d <= 0) return 'To\'g\'ri narx kiriting';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: totalController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Umumiy summa',
+                    border: const OutlineInputBorder(),
+                    suffixText: "so'm",
+                    filled: true,
+                    fillColor: Colors.blue.withOpacity(0.1),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // To'lov ma'lumotlari
+                const Text(
+                  'To\'lov ma\'lumotlari',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: paidController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Mijoz bergan pul',
+                    border: OutlineInputBorder(),
+                    suffixText: "so'm",
+                    hintText: '0',
+                  ),
+                  validator: (v) {
+                    final d = double.tryParse(v ?? '0');
+                    if (d == null || d < 0) return 'To\'g\'ri summa kiriting';
+                    
+                    // Check if paid amount is more than total
+                    final count = int.tryParse(trayController.text) ?? 0;
+                    final price = double.tryParse(priceController.text) ?? 0.0;
+                    final total = count * price;
+                    
+                    if (d > total && total > 0) {
+                      return 'Bergan pul (${d.toStringAsFixed(0)}) umumiy summadan (${total.toStringAsFixed(0)}) ko\'p bo\'lmasligi kerak';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: remainingController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Qolgan qarz',
+                    border: const OutlineInputBorder(),
+                    suffixText: "so'm",
+                    filled: true,
+                    fillColor: Colors.red.withOpacity(0.1),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -831,30 +1026,50 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           ),
           ElevatedButton(
             onPressed: () async {
-              final count = int.tryParse(controller.text);
-              if (count != null && count > 0) {
-                final farmProvider = Provider.of<FarmProvider>(
-                  context,
-                  listen: false,
+              if (formKey.currentState!.validate()) {
+                final name = nameController.text.trim();
+                final phone = phoneController.text.trim();
+                final address = addressController.text.trim();
+                final count = int.parse(trayController.text);
+                final price = double.parse(priceController.text);
+                final paid = double.tryParse(paidController.text) ?? 0.0;
+                final total = count * price;
+                final remaining = total - paid;
+                
+                final success = await farmProvider.addEggSaleWithCustomer(
+                  customerName: name,
+                  customerPhone: phone,
+                  customerAddress: address,
+                  trayCount: count,
+                  pricePerTray: price,
+                  paidAmount: paid,
                 );
-                final success = await farmProvider.addEggSale(count, 10000.0);
 
-                Navigator.pop(context);
+                // Safe navigation check
+                if (context.mounted) {
+                  Navigator.pop(context);
 
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$count fletka tuxum sotildi'),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '$name ga $count fletka tuxum sotildi.\n'
+                          'Umumiy: ${total.toStringAsFixed(0)} so\'m\n'
+                          'To\'landi: ${paid.toStringAsFixed(0)} so\'m\n'
+                          'Qarz: ${remaining.toStringAsFixed(0)} so\'m'
+                        ),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
                 }
               }
             },
@@ -866,20 +1081,48 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   }
 
   void _showAddBrokenDialog(BuildContext context) {
+    final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+    final currentStock = farmProvider.farm?.egg?.currentStock ?? 0;
     final controller = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Siniq Tuxum Kiritish'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Siniq fletka soni',
-            border: OutlineInputBorder(),
-            suffixText: 'fletka',
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Mavjud zaxira: $currentStock fletka',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Siniq fletka soni',
+                border: OutlineInputBorder(),
+                suffixText: 'fletka',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -889,34 +1132,49 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: () async {
               final count = int.tryParse(controller.text);
-              if (count != null && count > 0) {
-                final farmProvider = Provider.of<FarmProvider>(
-                  context,
-                  listen: false,
+              
+              if (count == null || count <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('To\'g\'ri son kiriting'),
+                    backgroundColor: Colors.orange,
+                  ),
                 );
-                final success = await farmProvider.addBrokenEgg(count);
+                return;
+              }
+              
+              if (count > currentStock) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Yetarli tuxum yo\'q! Mavjud: $currentStock fletka'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              final success = await farmProvider.addBrokenEgg(count);
 
-                Navigator.pop(context);
+              Navigator.pop(context);
 
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$count fletka siniq tuxum kiritildi'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
-                }
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$count fletka siniq tuxum kiritildi'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: Colors.red,
             ),
             child: const Text(
               'Kiritish',

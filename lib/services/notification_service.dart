@@ -1,14 +1,251 @@
-// import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import '../models/customer.dart';
+import '../models/farm.dart';
 
-// import 'package:flutter/material.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// import 'package:timezone/data/latest.dart' as tz_data;
-// import 'package:timezone/timezone.dart' as tz;
+class NotificationService {
+  static final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  static bool _initialized = false;
 
-// import '../utils/constants.dart';
+  static Future<void> initialize() async {
+    if (_initialized) return;
 
-// // Notification channels
-// enum NotificationChannelType { reminders, alerts, transactions, system }
+    // Initialize timezone data
+    tz.initializeTimeZones();
+
+    // Android initialization settings
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    // iOS initialization settings  
+    const DarwinInitializationSettings initializationSettingsIOS = 
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
+
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsIOS,
+    );
+
+    await _notifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: _onNotificationTapped,
+    );
+
+    // Request permission
+    await _requestPermissions();
+    _initialized = true;
+  }
+
+  static Future<void> _requestPermissions() async {
+    // Request notification permissions
+    final permission = await Permission.notification.request();
+    if (permission.isDenied) {
+      debugPrint('Notification permission denied');
+    }
+
+    // For Android 13+ exact alarm permission
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      await Permission.scheduleExactAlarm.request();
+    }
+  }
+
+  static void _onNotificationTapped(NotificationResponse response) {
+    debugPrint('Notification tapped: ${response.payload}');
+    // Handle notification tap based on payload
+  }
+
+  // Check for low egg stock
+  static Future<void> checkAndNotifyLowEggStock(Farm farm) async {
+    if (!_initialized) await initialize();
+
+    final eggStock = farm.egg?.currentStock ?? 0;
+    final minimumStock = await _getMinimumEggStock();
+
+    if (eggStock <= minimumStock && eggStock > 0) {
+      await showNotification(
+        id: 1,
+        title: '⚠️ Tuxum soni kam!',
+        body: 'Tuxum soni $eggStock fletka. Yangi tuxumlar ishlab chiqaring.',
+        payload: 'low_egg_stock',
+      );
+    }
+  }
+
+  // Check for low chicken count
+  static Future<void> checkAndNotifyLowChickenCount(Farm farm) async {
+    if (!_initialized) await initialize();
+
+    final chickenCount = farm.chicken?.currentCount ?? 0;
+    final minimumCount = await _getMinimumChickenCount();
+
+    if (chickenCount <= minimumCount && chickenCount > 0) {
+      await showNotification(
+        id: 2,
+        title: '⚠️ Tovuq soni kam!',
+        body: 'Tovuq soni $chickenCount ta. Yangi tovuqlar sotib oling.',
+        payload: 'low_chicken_count',
+      );
+    }
+  }
+
+  // Check for upcoming debt due dates
+  static Future<void> checkAndNotifyUpcomingDebts(List<Customer> customers) async {
+    if (!_initialized) await initialize();
+
+    final now = DateTime.now();
+    int upcomingDebtsCount = 0;
+    double totalUpcomingDebt = 0.0;
+
+    for (final customer in customers) {
+      final unpaidOrders = customer.orders.where((order) => !order.isPaid);
+      for (final order in unpaidOrders) {
+        // Check if order is 3+ days old (assuming debt should be paid within 3 days)
+        final daysSinceOrder = now.difference(order.deliveryDate).inDays;
+        if (daysSinceOrder >= 3) {
+          upcomingDebtsCount++;
+          totalUpcomingDebt += order.totalAmount;
+        }
+      }
+    }
+
+    if (upcomingDebtsCount > 0) {
+      await showNotification(
+        id: 3,
+        title: '💳 Qarzlar eslatmasi',
+        body: '$upcomingDebtsCount ta mijozning qarzi muddati yaqinlashdi. Umumiy: ${totalUpcomingDebt.toStringAsFixed(0)} so\'m',
+        payload: 'upcoming_debts',
+      );
+    }
+  }
+
+  // Daily reminder to record egg production
+  static Future<void> scheduleDailyEggReminder() async {
+    if (!_initialized) await initialize();
+
+    await _notifications.zonedSchedule(
+      10, // unique ID for daily reminder
+      '🥚 Bugungi tuxumlar',
+      'Bugungi tuxum ishlab chiqarishni kiritishni unutmang!',
+      _nextInstanceOf8AM(),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_reminders',
+          'Kundalik eslatmalar',
+          channelDescription: 'Har kungi tuxum ishlab chiqarish eslatmalari',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time,
+      payload: 'daily_egg_reminder',
+    );
+  }
+
+  // Generic notification method
+  static Future<void> showNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'farm_alerts',
+        'Ferma Bildirishnomalari',
+        channelDescription: 'Ferma boshqaruvi uchun muhim bildirishnomalar',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    );
+
+    await _notifications.show(
+      id,
+      title,
+      body,
+      platformChannelSpecifics,
+      payload: payload,
+    );
+  }
+
+  // Helper method to get next 8 AM
+  static tz.TZDateTime _nextInstanceOf8AM() {
+    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+    tz.TZDateTime scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, 8);
+    
+    if (scheduledDate.isBefore(now)) {
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    }
+    return scheduledDate;
+  }
+
+  // Settings methods
+  static Future<int> _getMinimumEggStock() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('minimum_egg_stock') ?? 10; // Default 10 trays
+  }
+
+  static Future<void> setMinimumEggStock(int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('minimum_egg_stock', count);
+  }
+
+  static Future<int> _getMinimumChickenCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('minimum_chicken_count') ?? 50; // Default 50 chickens
+  }
+
+  static Future<void> setMinimumChickenCount(int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('minimum_chicken_count', count);
+  }
+
+  // Enable/disable notifications
+  static Future<bool> areNotificationsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('notifications_enabled') ?? true;
+  }
+
+  static Future<void> setNotificationsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_enabled', enabled);
+    
+    if (!enabled) {
+      // Cancel all scheduled notifications
+      await _notifications.cancelAll();
+    } else {
+      // Re-schedule important notifications
+      await scheduleDailyEggReminder();
+    }
+  }
+
+  // Check all farm conditions and send appropriate notifications
+  static Future<void> checkAllConditionsAndNotify(Farm farm, List<Customer> customers) async {
+    final notificationsEnabled = await areNotificationsEnabled();
+    if (!notificationsEnabled) return;
+
+    await checkAndNotifyLowEggStock(farm);
+    await checkAndNotifyLowChickenCount(farm);
+    await checkAndNotifyUpcomingDebts(customers);
+  }
+}
 
 // // Notification types
 // enum NotificationType {
