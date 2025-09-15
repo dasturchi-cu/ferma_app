@@ -15,6 +15,7 @@ import 'screens/customers/customers_screen.dart';
 import 'screens/chickens/chickens_screen.dart';
 import 'screens/error/error_screen.dart';
 import 'utils/app_theme.dart';
+import 'utils/modern_theme.dart';
 import 'services/notification_service.dart';
 import 'services/activity_log_service.dart';
 import 'services/inventory_service.dart';
@@ -67,8 +68,6 @@ Future<void> _cleanupOldHiveBoxes() async {
 }
 
 Future<void> initializeApp() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -134,6 +133,9 @@ Future<void> initializeApp() async {
 }
 
 void main() {
+  // Initialize Flutter bindings first
+  WidgetsFlutterBinding.ensureInitialized();
+  
   runZonedGuarded<Future<void>>(
     () async {
       try {
@@ -141,26 +143,12 @@ void main() {
         runApp(const FermaApp());
       } catch (e, stackTrace) {
         debugPrint('Fatal error during app initialization: $e\n$stackTrace');
-        runApp(
-          MaterialApp(
-            home: ErrorScreen(
-              error: e.toString(),
-              stackTrace: stackTrace.toString(),
-            ),
-          ),
-        );
+        // Don't call runApp multiple times - handle errors in the app itself
       }
     },
     (error, stackTrace) {
       debugPrint('Uncaught error: $error\n$stackTrace');
-      runApp(
-        MaterialApp(
-          home: ErrorScreen(
-            error: error.toString(),
-            stackTrace: stackTrace.toString(),
-          ),
-        ),
-      );
+      // Log error but don't call runApp again
     },
   );
 }
@@ -192,29 +180,18 @@ class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Handle app lifecycle changes
+    // Handle app lifecycle changes safely
+    if (!mounted) return;
+    
     switch (state) {
       case AppLifecycleState.resumed:
         // App returned to foreground
-        try {
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          authProvider.checkAuthStatus();
-          
-          final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-          farmProvider.startRealtime();
-        } catch (e) {
-          debugPrint('Error resuming app: $e');
-        }
+        _handleAppResume();
         break;
         
       case AppLifecycleState.paused:
         // App going to background - save data
-        try {
-          final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-          farmProvider.stopRealtime();
-        } catch (e) {
-          debugPrint('Error pausing app: $e');
-        }
+        _handleAppPause();
         break;
         
       case AppLifecycleState.detached:
@@ -224,6 +201,37 @@ class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
         
       default:
         break;
+    }
+  }
+  
+  void _handleAppResume() {
+    try {
+      if (!mounted) return;
+      // Use a post-frame callback to ensure the widget tree is stable
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          authProvider.checkAuthStatus();
+          
+          final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+          farmProvider.startRealtime();
+        } catch (e) {
+          debugPrint('Error in post-frame resume callback: $e');
+        }
+      });
+    } catch (e) {
+      debugPrint('Error resuming app: $e');
+    }
+  }
+  
+  void _handleAppPause() {
+    try {
+      if (!mounted) return;
+      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+      farmProvider.stopRealtime();
+    } catch (e) {
+      debugPrint('Error pausing app: $e');
     }
   }
   
@@ -278,7 +286,7 @@ class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
           return MaterialApp(
             title: 'Ferma App',
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
+            theme: ModernTheme.lightTheme,
             navigatorKey: _navigatorKey,
             onGenerateRoute: (settings) {
               // Handle deep linking here if needed

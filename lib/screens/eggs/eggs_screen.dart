@@ -193,75 +193,129 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           final egg = farmProvider.farm?.egg;
           return Column(
             children: [
-              // Header with stats
+              // Modern Header with Gradient Background
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Theme.of(context).primaryColor,
-                      Theme.of(context).primaryColor.withOpacity(0.85),
-                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF4CAF50),
+                      const Color(0xFF66BB6A),
+                    ],
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
                 ),
                 child: SafeArea(
                   bottom: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (Navigator.canPop(context))
-                            IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title Section with Icon
+                        Row(
+                          children: [
+                            if (Navigator.canPop(context))
+                              Container(
+                                margin: const EdgeInsets.only(right: 12),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: InkWell(
+                                  onTap: () => Navigator.of(context).maybePop(),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: const Icon(
+                                    Icons.arrow_back,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
                               ),
-                              onPressed: () => Navigator.of(context).maybePop(),
-                              tooltip: 'Ortga',
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.egg_alt_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
-                          if (Navigator.canPop(context))
-                            const SizedBox(width: 8),
-                          const Icon(
-                            Icons.egg_outlined,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                          const SizedBox(width: 16),
-                          const Text(
-                            'Tuxum Boshqaruvi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Tuxum Boshqaruvi',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Ishlab chiqarish va sotuvlarni kuzatish',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildHeaderStat(
-                              'Bugungi Tuxumlar',
-                              '${egg?.todayProduction ?? 0} fletka',
-                              Icons.today,
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Modern Stats Cards
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildModernStatCard(
+                                'Bugungi yigim',
+                                '${egg?.todayProduction ?? 0}',
+                                'fletka',
+                                Icons.today_rounded,
+                                Colors.white,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildHeaderStat(
-                              'Joriy Zaxira',
-                              '${egg?.currentStock ?? 0} fletka',
-                              Icons.inventory,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildModernStatCard(
+                                'Joriy zaxira',
+                                '${egg?.currentStock ?? 0}',
+                                'fletka',
+                                Icons.inventory_rounded,
+                                Colors.amber[300]!,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -296,47 +350,119 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'eggs_fab',
-        onPressed: () => _showQuickActionsDialog(context),
-        backgroundColor: Theme.of(context).colorScheme.secondary,
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF4CAF50),
+              const Color(0xFF66BB6A),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF4CAF50).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          heroTag: 'eggs_fab',
+          onPressed: () => _showQuickActionsDialog(context),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          child: const Icon(
+            Icons.add_rounded,
+            size: 28,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildHeaderStat(String title, String value, IconData icon) {
+  Widget _buildModernStatCard(
+    String title,
+    String value,
+    String unit,
+    IconData icon,
+    Color accentColor,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: accentColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  unit,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

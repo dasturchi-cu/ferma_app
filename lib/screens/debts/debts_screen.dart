@@ -77,39 +77,133 @@ class _DebtsScreenState extends State<DebtsScreen>
         
         return Scaffold(
           backgroundColor: Colors.grey[50],
-          appBar: AppBar(
-            title: const Text(
-              'Qarz Daftari',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-        backgroundColor: AppTheme.primaryColor,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.analytics_outlined),
-                onPressed: () => _showStatistics(customers),
-                tooltip: 'Statistika',
-              ),
-            ],
-            flexibleSpace: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-            colors: [
-              AppTheme.primaryColor,
-              AppTheme.primaryColor.withOpacity(0.85),
-            ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-          ),
           body: Column(
             children: [
-              // Header statistika
-              _buildHeaderStats(filteredDebts, totalDebt),
-
+              // Modern Header with Gradient Background
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFFFF7043),
+                      const Color(0xFFFF8A65),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title Section with Icon
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Qarz Daftari',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Qarzdor mijozlar va to\'lovlar',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Statistics button
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: InkWell(
+                                onTap: () => _showStatistics(customers),
+                                borderRadius: BorderRadius.circular(12),
+                                child: const Icon(
+                                  Icons.analytics_outlined,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Modern Stats Cards
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildModernStatCard(
+                                'Qarzdorlar',
+                                '${filteredDebts.length}',
+                                'mijoz',
+                                Icons.people_outline_rounded,
+                                Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildModernStatCard(
+                                'Umumiy qarz',
+                                '${totalDebt.toStringAsFixed(0)}',
+                                "so'm",
+                                Icons.account_balance_wallet_outlined,
+                                totalDebt > 0 ? Colors.red[300]! : Colors.green[300]!,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               // Qidiruv paneli
               if (customers.where((c) => c.totalDebt > 0).isNotEmpty) _buildSearchBar(),
 
@@ -123,15 +217,39 @@ class _DebtsScreenState extends State<DebtsScreen>
               ),
             ],
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showAddDebtDialog(context),
-        backgroundColor: AppTheme.primaryColor,
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text(
-              'Yangi mijoz',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          floatingActionButton: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFFFF7043),
+                  const Color(0xFFFF8A65),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF7043).withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            elevation: 4,
+            child: FloatingActionButton.extended(
+              heroTag: 'debt_fab',
+              onPressed: () => _showAddDebtDialog(context),
+              backgroundColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              icon: const Icon(Icons.person_add_rounded),
+              label: const Text(
+                'Yangi mijoz',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -188,6 +306,91 @@ class _DebtsScreenState extends State<DebtsScreen>
     );
   }
 
+  Widget _buildModernStatCard(
+    String title,
+    String value,
+    String unit,
+    IconData icon,
+    Color accentColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: accentColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  unit,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
   Widget _buildStatItem({
     required IconData icon,
     required String label,
@@ -582,7 +785,9 @@ class _DebtsScreenState extends State<DebtsScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              if (mounted) Navigator.pop(context);
+            },
             child: const Text('Bekor qilish'),
           ),
           ElevatedButton(
@@ -597,7 +802,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                   note: noteController.text.trim(),
                 );
 
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
 
                 if (success) {
                   _showSnackBar(
@@ -686,7 +891,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                           onPressed: () async {
                             final success = await _markOrderAsPaid(customer.id, order.id);
                             if (success) {
-                              Navigator.pop(context);
+                              if (mounted) Navigator.pop(context);
                               _showSnackBar('Buyurtma to\'landi!', Colors.green);
                             } else {
                               _showSnackBar('Xatolik yuz berdi', Colors.red);

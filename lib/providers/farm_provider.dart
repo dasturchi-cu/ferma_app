@@ -6,9 +6,12 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/farm.dart';
 import '../models/customer.dart';
+import '../models/chicken.dart';
+import '../models/egg.dart';
 import '../utils/constants.dart';
 import '../services/storage_service.dart';
 import '../config/supabase_config.dart';
+import '../utils/uuid_generator.dart';
 
 class FarmProvider with ChangeNotifier {
   final SupabaseClient _supabase = SupabaseConfig.client;
@@ -33,12 +36,149 @@ class FarmProvider with ChangeNotifier {
 
   // Farmni o'rnatish
   void setFarm(Farm farm) {
-    _farm = farm;
+    // Initialize Egg and Chicken objects if they are null
+    _farm = _ensureFarmObjectsInitialized(farm);
     notifyListeners();
     // Auto-load data when farm is set
     _loadAllData();
     // Start connectivity monitoring
     _startConnectivityMonitoring();
+  }
+  
+  // Ensure Farm has Egg and Chicken objects initialized
+  Farm _ensureFarmObjectsInitialized(Farm farm) {
+    Chicken? chicken = farm.chicken;
+    Egg? egg = farm.egg;
+    bool needsUpdate = false;
+    
+    // Create Chicken object if null (only once)
+    if (chicken == null) {
+      print('🐔 Chicken object yaratilmoqda farm: ${farm.name}');
+      chicken = Chicken(
+        id: farm.id,
+        totalCount: farm.chickenCount,
+        deaths: const [],
+      );
+      needsUpdate = true;
+    }
+    
+    // Create Egg object if null (only once)  
+    if (egg == null) {
+      print('🥚 Egg object yaratilmoqda farm: ${farm.name}');
+      egg = Egg(id: farm.id);
+      needsUpdate = true;
+    }
+    
+    // Return farm with initialized objects only if needed
+    if (needsUpdate) {
+      final updatedFarm = farm.copyWith(
+        chicken: chicken,
+        egg: egg,
+        updatedAt: DateTime.now(),
+      );
+      
+      // Update internal farm reference immediately to prevent re-initialization
+      _farm = updatedFarm;
+      
+      // Schedule async save without blocking
+      Future.microtask(() async {
+        try {
+          await _saveToHive();
+          print('✅ Farm objects saqlandi: ${updatedFarm.name}');
+        } catch (e) {
+          print('❌ Farm objects saqlashda xatolik: $e');
+        }
+      });
+      return updatedFarm;
+    }
+    
+    return farm;
+  }
+  
+  // Load egg data from Supabase
+  Future<void> _loadEggDataFromSupabase(String farmId) async {
+    if (_farm?.egg == null) return;
+    
+    try {
+      // Load egg productions
+      final productions = await _supabase
+          .from('egg_productions')
+          .select()
+          .eq('farm_id', farmId);
+      
+      if (productions.isNotEmpty) {
+        print('💾 ${productions.length} ta egg record Supabase dan yuklandi');
+        
+        // Parse productions
+        for (final record in productions) {
+          final recordType = record['record_type'] as String? ?? 'production';
+          final trayCount = (record['tray_count'] as num?)?.toInt() ?? 0;
+          final dateStr = record['created_at'] as String? ?? record['date'] as String?;
+          final note = record['note'] as String?;
+          
+          DateTime recordDate = DateTime.now();
+          if (dateStr != null) {
+            try {
+              recordDate = DateTime.parse(dateStr);
+            } catch (e) {
+              recordDate = DateTime.now();
+            }
+          }
+          
+          switch (recordType) {
+            case 'production':
+              _farm!.egg!.production.add(EggProduction(
+                id: UuidGenerator.generateUuid(),
+                trayCount: trayCount,
+                date: recordDate,
+                note: note,
+              ));
+              break;
+            case 'sale':
+              final pricePerTray = (record['price_per_tray'] as num?)?.toDouble() ?? 0.0;
+              _farm!.egg!.sales.add(EggSale(
+                id: UuidGenerator.generateUuid(),
+                trayCount: trayCount,
+                pricePerTray: pricePerTray,
+                date: recordDate,
+                note: note,
+              ));
+              break;
+          }
+        }
+        
+        print('🥚 Egg zaxira yangilandi: ${_farm!.egg!.currentStock} fletka');
+      }
+    } catch (e) {
+      print('⚠️ Supabase dan egg ma\'lumotlarini yuklashda xatolik: $e');
+    }
+  }
+  
+  // Load egg data from Hive if available
+  Future<Egg?> _loadEggDataFromHive(String farmId) async {
+    try {
+      // Try to load egg productions from activity logs or egg records
+      if (!Hive.isBoxOpen('activity_logs')) {
+        await Hive.openBox<Map>('activity_logs');
+      }
+      
+      final activityBox = Hive.box<Map>('activity_logs');
+      final activities = activityBox.values.where(
+        (activity) => activity is Map && 
+                     activity['farm_id'] == farmId &&
+                     activity['type'] == 'eggProduction'
+      ).toList();
+      
+      if (activities.isNotEmpty) {
+        print('💾 ${activities.length} ta egg production topildi Hive dan');
+        // TODO: Parse activities and create proper Egg object
+      }
+      
+      return null; // For now, return null and let it create fresh Egg
+    } catch (e) {
+      print('⚠️ Egg data Hive dan yuklashda xatolik: $e');
+      return null;
+    }
   }
   
   // Load all data automatically
@@ -103,18 +243,28 @@ class FarmProvider with ChangeNotifier {
               try {
                 final farmData = rows.first;
                 
-                // Safe null check - only process if essential data is valid
+                // Enhanced null check - validate all critical fields
                 if (farmData != null && 
                     farmData['id'] != null && 
                     farmData['name'] != null &&
-                    farmData['owner_id'] != null) {
-                  final updated = Farm.fromJson(farmData);
+                    farmData['owner_id'] != null &&
+                    farmData['id'] is String &&
+                    farmData['name'] is String &&
+                    farmData['owner_id'] is String) {
+                  
+                  // Additional data sanitization
+                  final sanitizedData = Map<String, dynamic>.from(farmData);
+                  
+                  // Ensure description is not null
+                  sanitizedData['description'] ??= '';
+                  
+                  final updated = Farm.fromJson(sanitizedData);
                   _farm = updated;
                   await _saveToHive();
                   print('📡 Realtime farm yangilandi: ${_farm?.name}');
                   notifyListeners();
                 } else {
-                  print('⚠️ Realtime da noto\'g\'ri farm ma\'lumoti, e\'tibor berilmadi');
+                  print('⚠️ Realtime da noto\'g\'ri farm ma\'lumoti, e\'tibor berilmadi: $farmData');
                 }
               } catch (e) {
                 print('⚠️ Realtime farm ma\'lumotini parse qilishda xatolik: $e');
@@ -175,10 +325,32 @@ class FarmProvider with ChangeNotifier {
           .maybeSingle();
 
       if (response != null) {
-        _farm = Farm.fromJson(response);
-        await _saveToHive();
-        _isOfflineMode = false;
-        notifyListeners();
+        try {
+          // Sanitize response data
+          final sanitizedResponse = Map<String, dynamic>.from(response);
+          
+          // Ensure required fields are not null
+          sanitizedResponse['description'] ??= '';
+          sanitizedResponse['chicken_count'] ??= 0;
+          sanitizedResponse['egg_production_rate'] ??= 0;
+          
+          final loadedFarm = Farm.fromJson(sanitizedResponse);
+          _farm = _ensureFarmObjectsInitialized(loadedFarm);
+          
+          // Load egg productions from Supabase
+          await _loadEggDataFromSupabase(_farm!.id);
+          
+          await _saveToHive();
+          _isOfflineMode = false;
+          notifyListeners();
+        } catch (parseError) {
+          print('Supabase dan yuklashda xatolik: $parseError');
+          // If JSON parsing fails, load from Hive
+          await _loadFromHive();
+        }
+      } else {
+        print('! Primary farm data topilmadi, backup dan qidirilmoqda...');
+        await _loadFromHive();
       }
     } catch (e) {
       print('Farmni yangilashda xatolik, offline rejimga o\'tildi: $e');
@@ -226,6 +398,10 @@ class FarmProvider with ChangeNotifier {
     if (_farm == null) return false;
     try {
       _farm!.addChickens(count);
+      
+      // Immediate UI update
+      notifyListeners();
+      
       await _addActivityLog('Tovuqlar qo\'shildi', 
         '$count dona tovuq ferma ga qo\'shildi. Jami: ${_farm!.chicken?.currentCount ?? 0}');
       await _persist();
@@ -253,15 +429,35 @@ class FarmProvider with ChangeNotifier {
   }
 
   Future<bool> addEggProduction(int trays, {String? note}) async {
-    if (_farm == null) return false;
+    if (_farm == null) {
+      print('❌ Farm null, tuxum qo\'shib bo\'lmaydi');
+      return false;
+    }
+    
+    // Egg objectini tekshirish va yaratish
+    if (_farm!.egg == null) {
+      print('🥚 Egg object yaratilmoqda production uchun: ${_farm!.name}');
+      _farm = _farm!.copyWith(egg: Egg(id: _farm!.id));
+    }
+    
     try {
+      print('📝 Tuxum ishlab chiqarish qo\'shilmoqda: $trays fletka');
+      
       _farm!.addEggProduction(trays, note: note);
       final currentStock = _farm!.egg?.currentStock ?? 0;
+      
+      // Immediate UI update
+      notifyListeners();
+      
+      print('✅ Tuxum qo\'shildi. Yangi zaxira: $currentStock fletka');
+      
       await _addActivityLog('Tuxum ishlab chiqarildi', 
         '$trays fletka tuxum ishlab chiqarildi. Jami zaxira: $currentStock fletka${note != null ? '. Izoh: $note' : ''}');
+      
       await _persist();
       return true;
     } catch (e) {
+      print('❌ Tuxum ishlab chiqarishda xatolik: $e');
       _error = 'Tuxum ishlab chiqarishda xatolik: $e';
       await _addActivityLog('Xatolik', 'Tuxum ishlab chiqarishda xatolik: $e');
       return false;
@@ -337,6 +533,10 @@ class FarmProvider with ChangeNotifier {
     if (_farm == null) return false;
     try {
       _farm!.addCustomer(name, phone: phone, address: address);
+      
+      // Immediate UI update
+      notifyListeners();
+      
       await _addActivityLog('Yangi mijoz', 
         'Mijoz qo\'shildi: $name${phone != null ? ' ($phone)' : ''}${address != null ? ', $address' : ''}');
       await _persist();
@@ -507,8 +707,8 @@ class FarmProvider with ChangeNotifier {
       final deliveryDate = DateTime.now();
       _farm!.addCustomerOrder(
         existingDebtorId,
-        0, // 0 trays for manual debt
-        debtAmount, // total debt amount
+        1, // 1 tray to ensure totalAmount calculation works
+        debtAmount, // price per tray = total debt amount
         deliveryDate,
         note: 'MANUAL_DEBT: ${note.isNotEmpty ? note : "Qo'lda qo'shilgan qarz"}',
       );
@@ -684,10 +884,11 @@ class FarmProvider with ChangeNotifier {
     } catch (e) {
       print('❌ _persist() da kutilmagan xatolik: $e');
       _error = 'Ma\'lumotlarni saqlashda kutilmagan xatolik: $e';
-    } finally {
-      // Har doim listenerlarni xabardor qilish
+      // Faqat error bo'lsa UI ni update qilish
       notifyListeners();
     }
+    // SUCCESS: persist() da notifyListeners() chaqirilmaydi
+    // chunki alohida methodlarda allaqachon chaqirilgan
   }
 
   // RETRY MEXANIZMI BILAN SUPABASE SYNC
@@ -710,6 +911,49 @@ class FarmProvider with ChangeNotifier {
         
         await _supabase.from('farms').upsert(farmData);
         print('✅ Farm ma\'lumotlari Supabase ga saqlandi');
+        
+        // Egg productions ni saqlash
+        if (_farm!.egg != null && _farm!.egg!.production.isNotEmpty) {
+          for (final production in _farm!.egg!.production) {
+            final productionData = {
+              'id': UuidGenerator.generateUuid(),
+              'farm_id': _farm!.id,
+              'tray_count': production.trayCount,
+              'note': production.note,
+              'record_type': 'production',
+              'created_at': production.date.toIso8601String(),
+            };
+            
+            try {
+              await _supabase.from('egg_productions').upsert(productionData);
+            } catch (e) {
+              print('⚠️ Egg production saqlashda xatolik: $e');
+            }
+          }
+          print('✅ ${_farm!.egg!.production.length} ta egg production Supabase ga saqlandi');
+        }
+        
+        // Egg sales ni saqlash
+        if (_farm!.egg != null && _farm!.egg!.sales.isNotEmpty) {
+          for (final sale in _farm!.egg!.sales) {
+            final saleData = {
+              'id': UuidGenerator.generateUuid(),
+              'farm_id': _farm!.id,
+              'tray_count': sale.trayCount,
+              'price_per_tray': sale.pricePerTray,
+              'note': sale.note,
+              'record_type': 'sale',
+              'created_at': sale.date.toIso8601String(),
+            };
+            
+            try {
+              await _supabase.from('egg_productions').upsert(saleData);
+            } catch (e) {
+              print('⚠️ Egg sale saqlashda xatolik: $e');
+            }
+          }
+          print('✅ ${_farm!.egg!.sales.length} ta egg sale Supabase ga saqlandi');
+        }
         
         // Customers ni saqlash
         if (_farm!.customers.isNotEmpty) {
@@ -785,11 +1029,11 @@ class FarmProvider with ChangeNotifier {
       if (_farm == null) return;
       
       // ActivityLogService import qilmasdan to'g'ridan-to'g'ri activity log qo'shamiz
-      final activityId = '${_farm!.id.substring(0, 8)}-${DateTime.now().millisecondsSinceEpoch.toString().substring(0, 12)}-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+      final activityId = UuidGenerator.generateUuid();
       
       final activityData = {
         'farm_id': _farm!.id, // ID ni olib tashladik, Supabase avtomatik yaratadi
-        'type': 'system',
+        'type': 'other',
         'title': title,
         'description': description,
         'metadata': {'timestamp': DateTime.now().toIso8601String()},
@@ -812,7 +1056,21 @@ class FarmProvider with ChangeNotifier {
       // Supabase ga ham saqlash (offline bo'lmasa)
       if (!_isOfflineMode) {
         try {
-          await _supabase.from('activity_logs').insert(activityData);
+          // Avval Farm Supabase da mavjudligini tekshirish
+          final farmExists = await _supabase
+              .from('farms')
+              .select('id')
+              .eq('id', _farm!.id)
+              .maybeSingle();
+          
+          if (farmExists != null) {
+            await _supabase.from('activity_logs').insert(activityData);
+            print('✅ Activity log Supabase ga saqlandi');
+          } else {
+            print('⚠️ Farm Supabase da topilmadi, activity log faqat lokal saqlandi');
+            // Farm yo'q bo'lsa, avval Farm ni sync qilishga harakat qilish
+            await _saveToSupabase();
+          }
         } catch (e) {
           // Activity log Supabase ga saqlanmasa ham davom etamiz
           print('Activity log Supabase ga saqlanmadi: $e');
@@ -834,12 +1092,71 @@ class FarmProvider with ChangeNotifier {
     try {
       final savedFarm = await _storage.loadFarmOffline(_farm?.id ?? '');
       if (savedFarm != null) {
-        _farm = savedFarm;
-        print('Ma\'lumotlar offline dan yuklandi');
+        _farm = _ensureFarmObjectsInitialized(savedFarm);
+        print('💾 Farm offline dan yuklandi: ${_farm?.name}');
         notifyListeners();
       }
     } catch (e) {
       print('Offline ma\'lumotlarni yuklashda xatolik: $e');
+    }
+  }
+
+  // -----------------------------
+  // REFRESH VA CACHE CLEAR
+  // -----------------------------
+  Future<void> refreshData() async {
+    if (_farm == null) return;
+    
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      print('🔄 Ma\'lumotlarni yangilash boshlandi...');
+      
+      // Force refresh from Supabase
+      await _refreshFarmData();
+      
+      // Restart realtime if needed
+      if (!_isOfflineMode) {
+        await startRealtime();
+      }
+      
+      print('✅ Ma\'lumotlar muvaffaqiyatli yangilandi!');
+    } catch (e) {
+      print('❌ Ma\'lumotlarni yangilashda xatolik: $e');
+      _error = 'Ma\'lumotlarni yangilashda xatolik: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  Future<void> clearCacheAndRefresh() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      
+      print('🧹 Cache tozalanmoqda...');
+      
+      // Clear Hive boxes
+      await _storage.clearAllData();
+      
+      // Force refresh from Supabase
+      await _refreshFarmData();
+      
+      // Restart realtime
+      if (!_isOfflineMode) {
+        await startRealtime();
+      }
+      
+      print('✅ Cache tozalandi va ma\'lumotlar yangilandi!');
+    } catch (e) {
+      print('❌ Cache tozalashda xatolik: $e');
+      _error = 'Cache tozalashda xatolik: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

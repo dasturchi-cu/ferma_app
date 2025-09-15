@@ -1,9 +1,9 @@
 import 'package:hive/hive.dart';
 import 'package:json_annotation/json_annotation.dart';
-
+import 'customer.dart';
 import 'chicken.dart';
 import 'egg.dart';
-import 'customer.dart';
+import '../utils/uuid_generator.dart';
 
 part 'farm.g.dart';
 
@@ -23,18 +23,23 @@ class Farm {
   final String? address;
 
   @HiveField(4)
+  @JsonKey(name: 'owner_id')
   final String ownerId;
 
   @HiveField(5)
+  @JsonKey(name: 'chicken_count')
   int chickenCount;
 
   @HiveField(6)
+  @JsonKey(name: 'egg_production_rate')
   final int eggProductionRate;
 
   @HiveField(7)
+  @JsonKey(name: 'created_at')
   final DateTime? createdAt;
 
   @HiveField(8)
+  @JsonKey(name: 'updated_at')
   DateTime? updatedAt;
 
   @HiveField(9)
@@ -151,10 +156,8 @@ class Farm {
 
   // Customer management methods
   void addCustomer(String name, {String? phone, String? address}) {
-    // Generate a proper UUID-like ID using timestamp and random components
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final random = (timestamp % 10000).toString().padLeft(4, '0');
-    final customerId = '${timestamp.toRadixString(16)}-$random-4000-8000-${timestamp.toRadixString(16).padLeft(12, '0')}'.substring(0, 36);
+    // Generate a proper UUID
+    final customerId = UuidGenerator.generateUuid();
     
     final customer = Customer(
       id: customerId,

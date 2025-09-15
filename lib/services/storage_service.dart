@@ -248,6 +248,40 @@ class StorageService {
     }
   }
 
+  // Clear all offline data
+  Future<void> clearAllData() async {
+    try {
+      print('🧹 Barcha offline ma\'lumotlar tozalanmoqda...');
+      
+      // Close and clear all Hive boxes
+      final boxNames = ['farms', 'activity_logs', 'farm_backup', 'inventory_items', 'inventory_transactions'];
+      
+      for (final boxName in boxNames) {
+        try {
+          if (Hive.isBoxOpen(boxName)) {
+            final box = Hive.box(boxName);
+            await box.clear();
+            print('✅ $boxName box tozalandi');
+          }
+        } catch (e) {
+          print('⚠️ $boxName box tozalashda xatolik: $e');
+        }
+      }
+      
+      // Clear SharedPreferences sync data
+      await init();
+      final keys = _prefs!.getKeys().where((key) => key.startsWith('last_sync_')).toList();
+      for (final key in keys) {
+        await _prefs!.remove(key);
+      }
+      
+      print('✅ Barcha cache va sync ma\'lumotlari tozalandi!');
+    } catch (e) {
+      print('❌ Cache tozalashda xatolik: $e');
+      throw Exception('Cache tozalash xatosi: $e');
+    }
+  }
+
   // Sync status
   Future<void> markDataAsSynced(String userId) async {
     await init();

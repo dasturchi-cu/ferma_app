@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'package:json_annotation/json_annotation.dart';
+import '../utils/uuid_generator.dart';
 
 part 'customer.g.dart';
 
@@ -112,7 +113,7 @@ class Customer {
   }) {
     orders.add(
       CustomerOrder(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: UuidGenerator.generateUuid(),
         trayCount: trayCount,
         pricePerTray: pricePerTray,
         deliveryDate: deliveryDate,

@@ -4,7 +4,10 @@ import '../../providers/auth_provider.dart';
 import '../../providers/farm_provider.dart';
 import '../../utils/constants.dart';
 import '../analytics/reports_screen.dart';
+import '../reports/advanced_reports_screen.dart';
+import '../chickens/chicken_management_screen.dart';
 import '../customers/customers_screen.dart';
+import '../../widgets/modern_bottom_nav.dart';
 import '../debts/debts_screen.dart';
 import '../eggs/eggs_screen.dart';
 import '../settings/settings_screen.dart';
@@ -69,6 +72,32 @@ class _MainScreenState extends State<MainScreen> {
                   Navigator.pop(context);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.analytics),
+                title: const Text('Kengaytirilgan Hisobotlar'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdvancedReportsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.pets),
+                title: const Text('Tovuq Boshqaruvi'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChickenManagementScreen(),
+                    ),
+                  );
+                },
+              ),
               const Spacer(),
               const Divider(height: 1),
               ListTile(
@@ -116,6 +145,10 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: ModernBottomNav(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+      ),
     );
   }
 

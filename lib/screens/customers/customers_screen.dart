@@ -29,63 +29,109 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
           return Column(
             children: [
-              // Header
+              // Modern Header with Gradient Background
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppConstants.largePadding),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      AppTheme.primaryColor,
-                      AppTheme.primaryColor.withOpacity(0.85),
-                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF667eea),
+                      const Color(0xFF764ba2),
+                    ],
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
                 ),
                 child: SafeArea(
                   bottom: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            AppConstants.customerIcon,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                          const SizedBox(width: AppConstants.mediumPadding),
-                          Text(
-                            'Mijozlar boshqaruvi',
-                            style: AppConstants.titleStyle.copyWith(
-                              color: Colors.white,
-                              fontSize: 24,
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppConstants.largePadding),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title Section with Icon
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.groups_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppConstants.mediumPadding),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildHeaderStat(
-                              'Umumiy mijozlar',
-                              '${customers.length} ta',
-                              Icons.people,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Mijozlar boshqaruvi',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Mijozlar va ularning buyurtmalari',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: AppConstants.mediumPadding),
-                          Expanded(
-                            child: _buildHeaderStat(
-                              'Umumiy qarzdorlik',
-                              '${customers.fold<double>(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)} so\'m',
-                              Icons.money_off,
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Modern Stats Cards
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildModernStatCard(
+                                'Mijozlar soni',
+                                '${customers.length}',
+                                'ta',
+                                Icons.person_outline_rounded,
+                                Colors.white,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildModernStatCard(
+                                'Umumiy qarz',
+                                '${customers.fold<double>(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)}',
+                                "so'm",
+                                Icons.account_balance_wallet_outlined,
+                                customers.any((c) => c.totalDebt > 0) 
+                                    ? Colors.orange[300]!
+                                    : Colors.green[300]!,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -111,44 +157,122 @@ class _CustomersScreenState extends State<CustomersScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'add_customer_fab',
-        onPressed: () => _showAddCustomerDialog(context),
-        backgroundColor: AppConstants.accentColor,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Mijoz qo\'shish'),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF667eea),
+              const Color(0xFF764ba2),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF667eea).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          heroTag: 'add_customer_fab',
+          onPressed: () => _showAddCustomerDialog(context),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          icon: const Icon(Icons.person_add_rounded),
+          label: const Text(
+            'Mijoz qo\'shish',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildHeaderStat(String title, String value, IconData icon) {
+  Widget _buildModernStatCard(
+    String title,
+    String value,
+    String unit,
+    IconData icon,
+    Color accentColor,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: Colors.white, size: 24),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: accentColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 12,
-            ),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  unit,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -390,30 +514,104 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            AppConstants.customerIcon,
-            size: 80,
-            color: Colors.grey.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Hali mijozlar qo\'shilmagan',
-            style: AppConstants.subtitleStyle.copyWith(color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () => _showAddCustomerDialog(context),
-            icon: const Icon(Icons.person_add),
-            label: const Text('Birinchi mijozni qo\'shish'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.accentColor,
-              foregroundColor: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Modern Empty Illustration
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFF667eea).withOpacity(0.1),
+                    const Color(0xFF764ba2).withOpacity(0.1),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(60),
+                border: Border.all(
+                  color: const Color(0xFF667eea).withOpacity(0.2),
+                  width: 2,
+                ),
+              ),
+              child: Icon(
+                Icons.groups_rounded,
+                size: 64,
+                color: const Color(0xFF667eea).withOpacity(0.6),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 32),
+            Text(
+              'Hali mijozlar qo\'shilmagan',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Birinchi mijozingizni qo\'shib,\nbuyurtmalarni boshqarishni boshlang',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Container(
+              width: double.infinity,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    const Color(0xFF667eea),
+                    const Color(0xFF764ba2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF667eea).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () => _showAddCustomerDialog(context),
+                icon: const Icon(
+                  Icons.person_add_rounded,
+                  color: Colors.white,
+                ),
+                label: const Text(
+                  'Birinchi mijozni qo\'shish',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
