@@ -182,17 +182,49 @@ class Farm {
     }
   }
 
-  void addCustomerOrder(
+  bool addCustomerOrder(
     String customerId,
     int trayCount,
     double pricePerTray,
     DateTime deliveryDate, {
     String? note,
   }) {
+    // Validate input
+    if (trayCount <= 0 || pricePerTray < 0) {
+      return false;
+    }
+    
+    // Find the customer first
     final customer = findCustomer(customerId);
-    if (customer != null) {
+    if (customer == null) {
+      return false;
+    }
+    
+    // Check available stock if egg data exists
+    if (egg != null) {
+      final availableStock = egg!.currentStock;
+      if (trayCount > availableStock) {
+        return false; // Not enough stock
+      }
+      
+      // Deduct from stock
+      if (!egg!.deductFromStock(trayCount, note: 'Customer order for ${customer.name}')) {
+        return false; // Failed to deduct from stock
+      }
+    }
+    
+    try {
+      // Add the order to customer
       customer.addOrder(trayCount, pricePerTray, deliveryDate, note: note);
       updatedAt = DateTime.now();
+      return true;
+    } catch (e) {
+      // If adding order fails, revert the stock deduction
+      if (egg != null) {
+        // Add back the deducted stock by adding a negative sale
+        egg!.addSale(-trayCount, 0.0, note: 'Reverted order: $note');
+      }
+      return false;
     }
   }
 

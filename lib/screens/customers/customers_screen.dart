@@ -690,9 +690,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   address: addressController.text.trim(),
                 );
 
-                Navigator.pop(context);
+                // Safe navigation check
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
 
-                if (success) {
+                if (success && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -792,7 +795,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   address: addressController.text.trim(),
                 );
 
-                Navigator.pop(context);
+                // Safe navigation check
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
 
                 if (success) {
                   ScaffoldMessenger.of(context).showSnackBar(

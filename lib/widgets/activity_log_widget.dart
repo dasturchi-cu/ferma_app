@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/activity_log.dart';
 import '../services/activity_log_service.dart';
 import '../utils/app_theme.dart';
+import '../providers/farm_provider.dart';
 
 class ActivityLogWidget extends StatefulWidget {
   final String farmId;
@@ -12,7 +14,7 @@ class ActivityLogWidget extends StatefulWidget {
   const ActivityLogWidget({
     super.key,
     required this.farmId,
-    this.maxItems = 20,
+    this.maxItems = 10,
     this.showTitle = true,
     this.height = 300,
   });
@@ -24,27 +26,67 @@ class ActivityLogWidget extends StatefulWidget {
 class _ActivityLogWidgetState extends State<ActivityLogWidget> {
   List<ActivityLog> _activities = [];
   bool _isLoading = true;
+  
+  // REAL-TIME UPDATE: Refresh every 10 seconds
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadActivities();
+    _startAutoRefresh();
+    
+    // Register callback for immediate updates when activity logs are added
+    FarmProvider.onActivityLogUpdated = () {
+      if (mounted) {
+        _loadActivities(showLoading: false);
+      }
+    };
+  }
+  
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    // Clean up callback
+    FarmProvider.onActivityLogUpdated = null;
+    super.dispose();
+  }
+  
+  void _startAutoRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadActivities(showLoading: false); // Silent refresh
+      }
+    });
   }
 
-  Future<void> _loadActivities() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadActivities({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() => _isLoading = true);
+    }
+    
     try {
+      // First clean old logs to keep only recent ones
+      await ActivityLogService.clearOldLogs(keepCount: 50);
+      
       final activities = await ActivityLogService.getRecentActivityLogs(
         farmId: widget.farmId,
         limit: widget.maxItems,
       );
-      setState(() {
-        _activities = activities;
-        _isLoading = false;
-      });
+      
+      if (mounted) {
+        setState(() {
+          _activities = activities;
+          _isLoading = false;
+        });
+        // Silent update
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
-      print('Error loading activities: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      print('❌ Activity Log yuklashda xatolik: $e');
     }
   }
 

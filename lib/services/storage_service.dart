@@ -15,6 +15,10 @@ class StorageService {
   StorageService._internal();
 
   SharedPreferences? _prefs;
+  
+  // BACKUP DEBOUNCING: Prevent too frequent backups
+  final Map<String, DateTime> _lastBackupTimes = {};
+  static const Duration _minimumBackupInterval = Duration(seconds: 30); // Minimum 30 seconds between backups
 
   Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -57,29 +61,41 @@ class StorageService {
     return _prefs?.getString(_userEmailKey);
   }
 
-  // KUCHLI FARM DATA OFFLINE STORAGE
+  // KUCHLI FARM DATA OFFLINE STORAGE (Optimized with backup debouncing)
   Future<void> saveFarmOffline(Farm farm) async {
     try {
       // Store as Map to avoid adapter requirement
       await _openBoxSafely<Map>(AppConstants.farmBoxName);
       final box = Hive.box<Map>(AppConstants.farmBoxName);
       await box.put(farm.id, farm.toJson());
-      print('✅ Farm ma\'lumotlari lokal saqlanadi: ${farm.id}');
+      // Remove repetitive logging
 
-      // Also save as backup with timestamp
-      await _openBoxSafely<Map>('farm_backup');
-      final backupBox = Hive.box<Map>('farm_backup');
-      final backupKey = '${farm.id}_${DateTime.now().millisecondsSinceEpoch}';
-      await backupBox.put(backupKey, {
-        'farm': farm.toJson(), 
-        'timestamp': DateTime.now().toIso8601String(),
-        'version': '1.0'
-      });
-
-      // Keep only last 10 backups per farm
-      await _cleanupOldBackups(backupBox, farm.id);
+      // BACKUP DEBOUNCING: Only create backup if enough time has passed
+      final now = DateTime.now();
+      final lastBackupTime = _lastBackupTimes[farm.id];
       
-      print('💾 Backup ham yaratildi: $backupKey');
+      bool shouldCreateBackup = lastBackupTime == null || 
+          now.difference(lastBackupTime) >= _minimumBackupInterval;
+      
+      if (shouldCreateBackup) {
+        await _openBoxSafely<Map>('farm_backup');
+        final backupBox = Hive.box<Map>('farm_backup');
+        final backupKey = '${farm.id}_${now.millisecondsSinceEpoch}';
+        await backupBox.put(backupKey, {
+          'farm': farm.toJson(), 
+          'timestamp': now.toIso8601String(),
+          'version': '1.0'
+        });
+
+        // Keep only last 10 backups per farm
+        await _cleanupOldBackups(backupBox, farm.id);
+        
+        // Update last backup time
+        _lastBackupTimes[farm.id] = now;
+        
+        // Backup created silently
+      }
+      // REMOVED: else block with repetitive logging
       
     } catch (e) {
       print('❌ Farm offline saqlashda xatolik: $e');

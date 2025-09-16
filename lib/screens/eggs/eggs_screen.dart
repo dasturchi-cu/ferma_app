@@ -145,6 +145,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 }
               },
               child: const Text('Saqlash'),
+
             ),
           ],
         );
@@ -937,7 +938,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   void _showAddSaleDialog(BuildContext context) {
     final farmProvider = Provider.of<FarmProvider>(context, listen: false);
     final currentStock = farmProvider.farm?.egg?.currentStock ?? 0;
-    
+
     // Controllers
     final trayController = TextEditingController();
     final priceController = TextEditingController(text: '10000');
@@ -955,7 +956,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
       final paid = double.tryParse(paidController.text) ?? 0.0;
       final total = count * price;
       final remaining = total - paid;
-      
+
       totalController.text = total > 0 ? total.toStringAsFixed(0) : '';
       remainingController.text = remaining != 0 ? remaining.toStringAsFixed(0) : '0';
     }
@@ -996,7 +997,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Mijoz ma'lumotlari
                 const Text(
                   'Mijoz ma\'lumotlari',
@@ -1038,7 +1039,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Tuxum ma'lumotlari
                 const Text(
                   'Tuxum ma\'lumotlari',
@@ -1093,7 +1094,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // To'lov ma'lumotlari
                 const Text(
                   'To\'lov ma\'lumotlari',
@@ -1112,12 +1113,12 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   validator: (v) {
                     final d = double.tryParse(v ?? '0');
                     if (d == null || d < 0) return 'To\'g\'ri summa kiriting';
-                    
+
                     // Check if paid amount is more than total
                     final count = int.tryParse(trayController.text) ?? 0;
                     final price = double.tryParse(priceController.text) ?? 0.0;
                     final total = count * price;
-                    
+
                     if (d > total && total > 0) {
                       return 'Bergan pul (${d.toStringAsFixed(0)}) umumiy summadan (${total.toStringAsFixed(0)}) ko\'p bo\'lmasligi kerak';
                     }
@@ -1161,7 +1162,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 final paid = double.tryParse(paidController.text) ?? 0.0;
                 final total = count * price;
                 final remaining = total - paid;
-                
+
                 final success = await farmProvider.addEggSaleWithCustomer(
                   customerName: name,
                   customerPhone: phone,
@@ -1258,7 +1259,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: () async {
               final count = int.tryParse(controller.text);
-              
+
               if (count == null || count <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -1268,7 +1269,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 );
                 return;
               }
-              
+
               if (count > currentStock) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1278,7 +1279,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 );
                 return;
               }
-              
+
               final success = await farmProvider.addBrokenEgg(count);
 
               Navigator.pop(context);

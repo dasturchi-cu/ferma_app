@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'package:ferma_app/screens/eggs/eggs_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, BindingBase;
 
 import 'config/supabase_config.dart';
 import 'providers/auth_provider.dart';
@@ -19,8 +20,13 @@ import 'utils/modern_theme.dart';
 import 'services/notification_service.dart';
 import 'services/activity_log_service.dart';
 import 'services/inventory_service.dart';
+import 'models/farm.dart'; // Model fayllarini import qilish
+import 'models/chicken.dart';
+import 'models/egg.dart';
+import 'models/activity_log.dart';
+import 'models/inventory.dart';
 
-// SAFE HIVE BOX MANAGEMENT
+// Xavfsiz Hive Boxlarini Boshqarish
 Future<void> _openHiveBoxSafely<T>(String boxName, T defaultValue) async {
   try {
     if (!Hive.isBoxOpen(boxName)) {
@@ -31,50 +37,49 @@ Future<void> _openHiveBoxSafely<T>(String boxName, T defaultValue) async {
     }
   } catch (e) {
     print('⚠️ Box ochishda xatolik ($boxName): $e');
-    // Try to delete corrupted box and recreate
+    // Buzilgan boxni tozalab, qayta ochishga harakat qilish
     try {
       await Hive.deleteBoxFromDisk(boxName);
       await Hive.openBox<T>(boxName);
-      print('🔄 Box qayta yaratildi: $boxName');
+      print('✅ Buzilgan box tozalanib qayta ochildi: $boxName');
     } catch (recreateError) {
       print('❌ Box qayta yaratishda ham xatolik ($boxName): $recreateError');
-      // Continue without this box
+      // Bu boxsiz davom etish
     }
   }
 }
 
-// ESKI HIVE BOXLARNI TOZALASH
+// Eski Hive boxlarni to'g'ri tozalash
 Future<void> _cleanupOldHiveBoxes() async {
   final boxesToCleanup = ['farms', 'activity_logs', 'farm_backup', 'inventory_items', 'inventory_transactions'];
-  
+
   for (final boxName in boxesToCleanup) {
     try {
+      // Birinchi, boxni yopish
       if (Hive.isBoxOpen(boxName)) {
         await Hive.box(boxName).close();
         print('🗋 Box yopildi: $boxName');
       }
-      
-      // Delete from disk to prevent type conflicts
+
+      // Keyin, boxni diskdan o'chirish
       await Hive.deleteBoxFromDisk(boxName);
       print('🧹 Box diskdan tozalandi: $boxName');
-      
+
     } catch (e) {
       print('⚠️ Box tozalashda xatolik ($boxName): $e');
-      // Continue with other boxes
+      // Boshqa boxlar bilan davom etish
     }
   }
-  
+
   print('✅ Barcha eski boxlar tozalandi');
 }
 
 Future<void> initializeApp() async {
-  // Set preferred orientations
+  // Orientatsiya va UI sozlamalari
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-
-  // Enable edge-to-edge mode for modern Android
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -82,7 +87,7 @@ Future<void> initializeApp() async {
     ),
   );
 
-  // Initialize error handling
+  // Xatolarni boshqarishni sozlash
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     if (kDebugMode) {
@@ -91,64 +96,49 @@ Future<void> initializeApp() async {
     }
   };
 
-  // KUCHLI HIVE INITIALIZATION
+  // Hive va Supabase'ni ishga tushirish
   await Hive.initFlutter();
-  
-  // Register all necessary adapters
-  print('📦 Hive adapterlarini ro\'yxatga olish...');
-  
-  // Ensure adapter registration is safe
-  try {
-    // Activity Log adapters are already registered in ActivityLogService
-    // Inventory adapters are already registered in InventoryService
-    
-    // Clean up old boxes first to prevent type conflicts
-    await _cleanupOldHiveBoxes();
-    
-    // Open critical boxes with error handling - using consistent Map types
-    await _openHiveBoxSafely<Map>('farms', <String, dynamic>{});
-    await _openHiveBoxSafely<Map>('activity_logs', <String, dynamic>{});
-    await _openHiveBoxSafely<Map>('farm_backup', <String, dynamic>{});
-    await _openHiveBoxSafely<Map>('inventory_items', <String, dynamic>{});
-    await _openHiveBoxSafely<Map>('inventory_transactions', <String, dynamic>{});
-    
-    print('✅ Barcha Hive boxes muvaffaqiyatli ochildi');
-    
-  } catch (e) {
-    print('❌ Hive adapter/box xatosi: $e');
-    // Continue without crashing
-  }
-  
-  // Initialize Supabase
+
+  // Adapterlarni ro'yxatdan o'tkazish
+  // print('📦 Hive adapterlarini ro\'yxatga olish...');
+  // Hive.registerAdapter(FarmProvider());
+  // Hive.registerAdapter(ChickenAdapter());
+  // Hive.registerAdapter(EggsScreen() as TypeAdapter);
+  // Hive.registerAdapter(EggProductionAdapter());
+  // Hive.registerAdapter(EggsScreen() as TypeAdapter);
+  // Hive.registerAdapter(ActivityLogAdapter());
+  // Hive.registerAdapter(InventoryItemAdapter());
+  // Hive.registerAdapter(InventoryTransactionAdapter());
+
+  // Eski boxlarni tozalash
+  await _cleanupOldHiveBoxes();
+
+  // Yangi boxlarni xavfsiz ochish
+  await _openHiveBoxSafely<Map>('farms', <String, dynamic>{});
+  await _openHiveBoxSafely<Map>('activity_logs', <String, dynamic>{});
+  await _openHiveBoxSafely<Map>('farm_backup', <String, dynamic>{});
+  await _openHiveBoxSafely<Map>('inventory_items', <String, dynamic>{});
+  await _openHiveBoxSafely<Map>('inventory_transactions', <String, dynamic>{});
+
+  print('✅ Barcha Hive boxes muvaffaqiyatli ochildi');
+
   await SupabaseConfig.initialize();
-  
-  // Initialize Notification Service
   await NotificationService.initialize();
-  
-  // Initialize Activity Log Service  
   await ActivityLogService.initialize();
-  
-  // Initialize Inventory Service
   await InventoryService.initialize();
 }
 
-void main() {
-  // Initialize Flutter bindings first
+void main() async {
+  BindingBase.debugZoneErrorsAreFatal = true;
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   runZonedGuarded<Future<void>>(
-    () async {
-      try {
-        await initializeApp();
-        runApp(const FermaApp());
-      } catch (e, stackTrace) {
-        debugPrint('Fatal error during app initialization: $e\n$stackTrace');
-        // Don't call runApp multiple times - handle errors in the app itself
-      }
+        () async {
+      await initializeApp();
+      runApp(const FermaApp());
     },
-    (error, stackTrace) {
+        (error, stackTrace) {
       debugPrint('Uncaught error: $error\n$stackTrace');
-      // Log error but don't call runApp again
     },
   );
 }
@@ -161,103 +151,23 @@ class FermaApp extends StatefulWidget {
 }
 
 class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  bool _isInitialized = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeApp();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cleanupResources();
+    Hive.close(); // Ilova yopilayotganda barcha boxlarni yopish
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Handle app lifecycle changes safely
-    if (!mounted) return;
-    
-    switch (state) {
-      case AppLifecycleState.resumed:
-        // App returned to foreground
-        _handleAppResume();
-        break;
-        
-      case AppLifecycleState.paused:
-        // App going to background - save data
-        _handleAppPause();
-        break;
-        
-      case AppLifecycleState.detached:
-        // App being terminated - final cleanup
-        _cleanupResources();
-        break;
-        
-      default:
-        break;
-    }
-  }
-  
-  void _handleAppResume() {
-    try {
-      if (!mounted) return;
-      // Use a post-frame callback to ensure the widget tree is stable
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        try {
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          authProvider.checkAuthStatus();
-          
-          final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-          farmProvider.startRealtime();
-        } catch (e) {
-          debugPrint('Error in post-frame resume callback: $e');
-        }
-      });
-    } catch (e) {
-      debugPrint('Error resuming app: $e');
-    }
-  }
-  
-  void _handleAppPause() {
-    try {
-      if (!mounted) return;
-      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-      farmProvider.stopRealtime();
-    } catch (e) {
-      debugPrint('Error pausing app: $e');
-    }
-  }
-  
-  void _cleanupResources() {
-    try {
-      // Close all Hive boxes
+    if (state == AppLifecycleState.detached) {
       Hive.close();
-      debugPrint('🧹 Hive boxes yopildi');
-    } catch (e) {
-      debugPrint('Hive cleanup xatosi: $e');
-    }
-  }
-
-  Future<void> _initializeApp() async {
-    try {
-      // Add any additional initialization here
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      if (mounted) {
-        setState(() {
-          _isInitialized = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Initialization error: $e');
-      // Handle initialization error
     }
   }
 
@@ -287,16 +197,9 @@ class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
             title: 'Ferma App',
             debugShowCheckedModeBanner: false,
             theme: ModernTheme.lightTheme,
-            navigatorKey: _navigatorKey,
-            onGenerateRoute: (settings) {
-              // Handle deep linking here if needed
-              return null;
-            },
-            home: _isInitialized 
-                ? (authProvider.isAuthenticated || authProvider.farm != null)
-                    ? const MainScreen() 
-                    : const LoginScreen()
-                : const SplashScreen(),
+            home: (authProvider.isAuthenticated || authProvider.farm != null)
+                ? const MainScreen()
+                : const LoginScreen(),
             routes: {
               '/login': (context) => const LoginScreen(),
               '/home': (context) => const MainScreen(),

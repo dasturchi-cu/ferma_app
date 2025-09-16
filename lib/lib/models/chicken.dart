@@ -1,16 +1,16 @@
 import 'package:hive/hive.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-
 
 DateTime _parseDate(dynamic v) {
   if (v == null) return DateTime.now();
-  if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
+  if (v is DateTime) return v;
   if (v is String) {
-    final asInt = int.tryParse(v);
-    if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
     try {
       return DateTime.parse(v);
     } catch (_) {}
+  }
+  if (v is int) {
+    // Fallback: eski timestamp bo‘lsa ham ishlasin
+    return DateTime.fromMillisecondsSinceEpoch(v);
   }
   return DateTime.now();
 }
@@ -38,30 +38,30 @@ class Chicken extends HiveObject {
     List<ChickenDeath>? deaths,
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) : deaths = deaths ?? [],
-       createdAt = createdAt ?? DateTime.now(),
-       updatedAt = updatedAt ?? DateTime.now();
+  })  : deaths = deaths ?? [],
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
-  // Joriy tovuqlar sonini hisoblash
+  /// Joriy tovuqlar sonini hisoblash
   int get currentCount {
     int totalDeaths = deaths.fold(0, (sum, death) => sum + death.count);
     return totalCount - totalDeaths;
   }
 
-  // Bugungi o'limlar soni
+  /// Bugungi o‘limlar soni
   int get todayDeaths {
     DateTime today = DateTime.now();
     return deaths
         .where(
           (death) =>
-              death.date.year == today.year &&
-              death.date.month == today.month &&
-              death.date.day == today.day,
-        )
+      death.date.year == today.year &&
+          death.date.month == today.month &&
+          death.date.day == today.day,
+    )
         .fold(0, (sum, death) => sum + death.count);
   }
 
-  // O'limlar statistikasi
+  /// O‘limlar statistikasi
   Map<String, dynamic> get deathStats {
     if (deaths.isEmpty) {
       return {
@@ -105,7 +105,7 @@ class Chicken extends HiveObject {
     };
   }
 
-  // O'lim qo'shish
+  /// O‘lim qo‘shish
   void addDeath(int count) {
     deaths.add(
       ChickenDeath(
@@ -117,40 +117,39 @@ class Chicken extends HiveObject {
     updatedAt = DateTime.now();
   }
 
-  // O'limni o'chirish (faqat bugungi)
+  /// O‘limni o‘chirish (faqat bugungi)
   void removeTodayDeath() {
     DateTime today = DateTime.now();
     deaths.removeWhere(
-      (death) =>
-          death.date.year == today.year &&
+          (death) =>
+      death.date.year == today.year &&
           death.date.month == today.month &&
           death.date.day == today.day,
     );
     updatedAt = DateTime.now();
   }
 
-  // Firebase serialization
+  /// Firebase serialization (ISO string format)
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'totalCount': totalCount,
       'deaths': deaths.map((death) => death.toJson()).toList(),
-      'createdAt': createdAt.millisecondsSinceEpoch,
-      'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
     };
   }
 
-  // Firebase deserialization
+  /// Firebase deserialization (ISO string format)
   factory Chicken.fromJson(Map<String, dynamic> json) {
     return Chicken(
       id: json['id'] as String? ?? '',
       totalCount: json['totalCount'] as int? ?? 0,
-      deaths:
-          (json['deaths'] as List<dynamic>?)
-              ?.map(
-                (death) => ChickenDeath.fromJson(death as Map<String, dynamic>),
-              )
-              .toList() ??
+      deaths: (json['deaths'] as List<dynamic>?)
+          ?.map(
+            (death) => ChickenDeath.fromJson(death as Map<String, dynamic>),
+      )
+          .toList() ??
           [],
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
@@ -179,17 +178,17 @@ class ChickenDeath extends HiveObject {
     this.note,
   });
 
-  // Firebase serialization
+  /// Firebase serialization (ISO string format)
   Map<String, dynamic> toJson() {
     return {
       'id': id,
       'count': count,
-      'date': date.millisecondsSinceEpoch,
+      'date': date.toIso8601String(),
       'note': note,
     };
   }
 
-  // Firebase deserialization
+  /// Firebase deserialization (ISO string format)
   factory ChickenDeath.fromJson(Map<String, dynamic> json) {
     return ChickenDeath(
       id: json['id'] as String? ?? '',

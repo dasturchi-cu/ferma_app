@@ -4,9 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Enhanced Colors with Modern Vivid Tones
-  static const Color primaryColor = Color(0xFF6366F1);      // Bright Indigo
+  static const Color primaryColor = Color(0xFF0063C4);      // Bright Indigo
   static const Color secondaryColor = Color(0xFFFF6B35);    // Vibrant Orange
-  static const Color accentColor = Color(0xFF00D4AA);       // Bright Teal
+  static const Color accentColor = Color(0xFF0976FF);       // Bright Teal
   static const Color tertiaryColor = Color(0xFFFFE066);     // Golden Yellow
 
   static const Color backgroundColor = Color(0xFFF8FAFC);   // Cool White

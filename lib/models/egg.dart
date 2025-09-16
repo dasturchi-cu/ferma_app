@@ -129,6 +129,20 @@ class Egg {
     // Katta tuxumlar alohida chiqarilishi kerak
     return totalProduction - totalSales - totalBroken - totalLarge;
   }
+  
+  // Tuxumlarni zaxiradan chiqarish
+  bool deductFromStock(int trayCount, {String? note}) {
+    if (trayCount <= 0) return false;
+    
+    // Check if we have enough stock
+    if (trayCount > currentStock) {
+      return false; // Not enough stock
+    }
+    
+    // Add to sales with 0 price since this is just a stock deduction
+    addSale(trayCount, 0.0, note: note ?? 'Stock deduction');
+    return true;
+  }
 
   // Oxirgi N kun uchun ishlab chiqarish yig'indisi
   int productionLastNDays(int days) {

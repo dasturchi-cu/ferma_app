@@ -802,18 +802,21 @@ class _DebtsScreenState extends State<DebtsScreen>
                   note: noteController.text.trim(),
                 );
 
-                if (mounted) Navigator.pop(context);
-
-                if (success) {
-                  _showSnackBar(
-                    '${nameController.text.trim()} ga ${debtController.text} so\'m qarz qo\'shildi',
-                    Colors.green,
-                  );
-                } else {
-                  _showSnackBar(
-                    farmProvider.error ?? 'Xatolik yuz berdi',
-                    Colors.red,
-                  );
+                // Safe navigation check
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  
+                  if (success) {
+                    _showSnackBar(
+                      '${nameController.text.trim()} ga ${debtController.text} so\'m qarz qo\'shildi',
+                      Colors.green,
+                    );
+                  } else {
+                    _showSnackBar(
+                      farmProvider.error ?? 'Xatolik yuz berdi',
+                      Colors.red,
+                    );
+                  }
                 }
               }
             },
