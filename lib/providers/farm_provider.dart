@@ -921,6 +921,7 @@ class FarmProvider with ChangeNotifier {
               'tray_count': production.trayCount,
               'note': production.note,
               'record_type': 'production',
+              'production_date': production.date.toIso8601String(),
               'created_at': production.date.toIso8601String(),
             };
             
@@ -943,6 +944,7 @@ class FarmProvider with ChangeNotifier {
               'price_per_tray': sale.pricePerTray,
               'note': sale.note,
               'record_type': 'sale',
+              'production_date': sale.date.toIso8601String(),
               'created_at': sale.date.toIso8601String(),
             };
             
