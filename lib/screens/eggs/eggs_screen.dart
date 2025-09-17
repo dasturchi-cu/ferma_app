@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/farm_provider.dart';
-// import '../../utils/constants.dart' as AppConstants;
+import '../../utils/constants.dart';
 import '../../widgets/stat_card.dart';
 
 class EggsScreen extends StatefulWidget {
@@ -145,7 +145,6 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 }
               },
               child: const Text('Saqlash'),
-
             ),
           ],
         );
@@ -386,12 +385,12 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildModernStatCard(
-    String title,
-    String value,
-    String unit,
-    IconData icon,
-    Color accentColor,
-  ) {
+      String title,
+      String value,
+      String unit,
+      IconData icon,
+      Color accentColor,
+      ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -521,19 +520,19 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 ),
                 _buildStatCard(
                   'Umumiy Ishlab Chiqarish',
-                  '${egg.productionStats['totalProduction']} fletka',
+                  '${egg.productionStats?['totalProduction'] ?? 0} fletka',
                   Icons.production_quantity_limits,
                 ),
                 _buildStatCard(
                   'Eng Ko\'p Kun',
-                  egg.productionStats['mostProductionDay'] != null
-                      ? '${egg.productionStats['mostProductionDay']['count']} fletka'
+                  egg.productionStats?['mostProductionDay'] != null
+                      ? '${egg.productionStats!['mostProductionDay']['count']} fletka'
                       : 'Ma\'lumot yo\'q',
                   Icons.trending_up,
                 ),
                 _buildStatCard(
                   'O\'rtacha Kunlik',
-                  '${egg.productionStats['averageProduction'].toStringAsFixed(1)} fletka',
+                  '${(egg.productionStats?['averageProduction'] ?? 0.0).toStringAsFixed(1)} fletka',
                   Icons.analytics,
                 ),
               ],
@@ -597,7 +596,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 StatCard(
                   title: 'Umumiy Sotuvlar',
                   value:
-                      '${egg.sales.fold(0, (sum, sale) => sum + sale.trayCount)} fletka',
+                  '${egg.sales?.fold(0, (sum, sale) => sum + sale.trayCount) ?? 0} fletka',
                   icon: Icons.shopping_cart,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -609,7 +608,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 ),
                 StatCard(
                   title: 'Sotuvlar Soni',
-                  value: '${egg.sales.length} ta',
+                  value: '${egg.sales?.length ?? 0} ta',
                   icon: Icons.receipt,
                   color: Theme.of(context).colorScheme.tertiary,
                 ),
@@ -667,27 +666,27 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
               children: [
                 StatCard(
                   title: 'Bugungi Siniq',
-                  value: '${egg.todayBroken} fletka',
+                  value: '${egg.todayBroken ?? 0} fletka',
                   icon: Icons.warning,
                   color: Theme.of(context).colorScheme.error,
                 ),
                 StatCard(
                   title: 'Umumiy Siniq',
-                  value: '${egg.brokenStats['totalBroken']} fletka',
+                  value: '${egg.brokenStats?['totalBroken'] ?? 0} fletka',
                   icon: Icons.warning,
                   color: Theme.of(context).colorScheme.error,
                 ),
                 StatCard(
                   title: 'Eng Ko\'p Siniq Kun',
-                  value: egg.brokenStats['mostBrokenDay'] != null
-                      ? '${egg.brokenStats['mostBrokenDay']['count']} fletka'
+                  value: egg.brokenStats?['mostBrokenDay'] != null
+                      ? '${egg.brokenStats!['mostBrokenDay']['count']} fletka'
                       : 'Ma\'lumot yo\'q',
                   icon: Icons.trending_up,
                   color: Theme.of(context).colorScheme.error,
                 ),
                 StatCard(
                   title: 'Siniq Bo\'lmagan Kunlar',
-                  value: '${egg.brokenStats['zeroBrokenDays']} kun',
+                  value: '${egg.brokenStats?['zeroBrokenDays'] ?? 0} kun',
                   icon: Icons.check_circle,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -745,20 +744,20 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
               children: [
                 StatCard(
                   title: 'Bugungi Katta',
-                  value: '${egg.todayLarge} fletka',
+                  value: '${egg.todayLarge ?? 0} fletka',
                   icon: Icons.expand,
                   color: Theme.of(context).colorScheme.tertiary,
                 ),
                 StatCard(
                   title: 'Umumiy Katta',
-                  value: '${egg.largeEggStats['totalLarge']} fletka',
+                  value: '${egg.largeEggStats?['totalLarge'] ?? 0} fletka',
                   icon: Icons.expand_circle_down,
                   color: Theme.of(context).colorScheme.secondary,
                 ),
                 StatCard(
                   title: 'Eng Ko\'p Katta Kun',
-                  value: egg.largeEggStats['mostLargeDay'] != null
-                      ? '${egg.largeEggStats['mostLargeDay']['count']} fletka'
+                  value: egg.largeEggStats?['mostLargeDay'] != null
+                      ? '${egg.largeEggStats!['mostLargeDay']['count']} fletka'
                       : 'Ma\'lumot yo\'q',
                   icon: Icons.trending_up,
                   color: Theme.of(context).colorScheme.primary,
@@ -766,7 +765,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 StatCard(
                   title: 'O\'rtacha Kunlik',
                   value:
-                      '${egg.largeEggStats['averageLarge'].toStringAsFixed(1)} fletka',
+                  '${(egg.largeEggStats?['averageLarge'] ?? 0.0).toStringAsFixed(1)} fletka',
                   icon: Icons.analytics,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -861,7 +860,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Tuxum Yig\'ish',
                   Icons.egg,
                   Theme.of(context).colorScheme.secondary,
-                  () {
+                      () {
                     Navigator.pop(context);
                     _showAddProductionDialog();
                   },
@@ -870,7 +869,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Sotuv',
                   Icons.sell,
                   Theme.of(context).colorScheme.primary,
-                  () {
+                      () {
                     Navigator.pop(context);
                     _showAddSaleDialog(context);
                   },
@@ -879,7 +878,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Siniq',
                   Icons.broken_image,
                   Theme.of(context).colorScheme.error,
-                  () {
+                      () {
                     Navigator.pop(context);
                     _showAddBrokenDialog(context);
                   },
@@ -888,7 +887,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Katta',
                   Icons.expand,
                   Theme.of(context).colorScheme.tertiary,
-                  () {
+                      () {
                     Navigator.pop(context);
                     _showAddLargeDialog(context);
                   },
@@ -902,11 +901,11 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildQuickActionButton(
-    String title,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
+      String title,
+      IconData icon,
+      Color color,
+      VoidCallback onTap,
+      ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -950,7 +949,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
     final addressController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    void _calculateAmounts() {
+    void calculateAmounts() {
       final count = int.tryParse(trayController.text) ?? 0;
       final price = double.tryParse(priceController.text) ?? 0.0;
       final paid = double.tryParse(paidController.text) ?? 0.0;
@@ -962,9 +961,9 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
     }
 
     // Listen to changes
-    trayController.addListener(_calculateAmounts);
-    priceController.addListener(_calculateAmounts);
-    paidController.addListener(_calculateAmounts);
+    trayController.addListener(calculateAmounts);
+    priceController.addListener(calculateAmounts);
+    paidController.addListener(calculateAmounts);
 
     showDialog(
       context: context,
@@ -1180,10 +1179,10 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          '$name ga $count fletka tuxum sotildi.\n'
-                          'Umumiy: ${total.toStringAsFixed(0)} so\'m\n'
-                          'To\'landi: ${paid.toStringAsFixed(0)} so\'m\n'
-                          'Qarz: ${remaining.toStringAsFixed(0)} so\'m'
+                            '$name ga $count fletka tuxum sotildi.\n'
+                                'Umumiy: ${total.toStringAsFixed(0)} so\'m\n'
+                                'To\'landi: ${paid.toStringAsFixed(0)} so\'m\n'
+                                'Qarz: ${remaining.toStringAsFixed(0)} so\'m'
                         ),
                         backgroundColor: Colors.green,
                         duration: const Duration(seconds: 4),
@@ -1261,43 +1260,49 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
               final count = int.tryParse(controller.text);
 
               if (count == null || count <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('To\'g\'ri son kiriting'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('To\'g\'ri son kiriting'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
                 return;
               }
 
               if (count > currentStock) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Yetarli tuxum yo\'q! Mavjud: $currentStock fletka'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Yetarli tuxum yo\'q! Mavjud: $currentStock fletka'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
                 return;
               }
 
               final success = await farmProvider.addBrokenEgg(count);
 
-              Navigator.pop(context);
+              if (context.mounted) {
+                Navigator.pop(context);
 
-              if (success) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$count fletka siniq tuxum kiritildi'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$count fletka siniq tuxum kiritildi'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(
@@ -1344,22 +1349,24 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 );
                 final success = await farmProvider.addLargeEgg(count);
 
-                Navigator.pop(context);
+                if (context.mounted) {
+                  Navigator.pop(context);
 
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$count fletka katta tuxum kiritildi'),
-                      backgroundColor: Theme.of(context).colorScheme.tertiary,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$count fletka katta tuxum kiritildi'),
+                        backgroundColor: Theme.of(context).colorScheme.tertiary,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
                 }
               }
             },

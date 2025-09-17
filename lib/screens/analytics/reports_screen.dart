@@ -19,48 +19,16 @@ class _ReportsScreenState extends State<ReportsScreen>
   late TabController _tabController;
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
-  bool _isRealtimeActive = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-
-    // Listen to farm provider changes to detect realtime updates
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-      farmProvider.addListener(_onFarmDataChanged);
-    });
-  }
-
-  void _onFarmDataChanged() {
-    if (mounted) {
-      setState(() {
-        _isRealtimeActive = true;
-      });
-
-      // Reset the indicator after 2 seconds
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _isRealtimeActive = false;
-          });
-        }
-      });
-    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    // Remove listener to prevent memory leaks
-    try {
-      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-      farmProvider.removeListener(_onFarmDataChanged);
-    } catch (e) {
-      // Provider might not be available during disposal
-      print('Warning: Could not remove listener during dispose: $e');
-    }
     super.dispose();
   }
 
@@ -84,33 +52,6 @@ class _ReportsScreenState extends State<ReportsScreen>
           ),
         ),
         actions: [
-          // Realtime indicator
-          if (_isRealtimeActive)
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Live',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           IconButton(
             icon: const Icon(Icons.date_range),
             onPressed: () => _showDatePicker(),

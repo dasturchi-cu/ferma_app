@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'dart:async';
-import 'dart:math';
+import '../../providers/farm_provider.dart';
 import '../../utils/app_theme.dart';
-import '../../widgets/progress_visualization.dart';
-// import '../../services/smart_analytics.dart';
+import '../../widgets/stat_card.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -16,170 +15,17 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
-  AnimationController? _pulseController;
-  AnimationController? _fadeController;
-  Timer? _realTimeTimer;
-
   int _selectedPeriod = 0; // 0: 7 kun, 1: 30 kun, 2: 90 kun
-
-  // Real-time data
-  List<FlSpot> _eggTrendData = [];
-  List<BarChartGroupData> _revenueData = [];
-  List<FlSpot> _chickenCountData = [];
-
-  // Stats variables for real-time updates
-  int _currentEggs = 28;
-  int _currentProfit = 75000;
-  double _mortalityRate = 2.4;
-  int _activeCustomers = 12;
-  bool _isLiveMode = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _initializeData();
-    _startRealTimeUpdates();
-  }
-
-  void _initializeData() {
-    // Initialize egg trend data
-    _eggTrendData = [
-      const FlSpot(0, 25),
-      const FlSpot(1, 28),
-      const FlSpot(2, 30),
-      const FlSpot(3, 27),
-      const FlSpot(4, 32),
-      const FlSpot(5, 29),
-      const FlSpot(6, 31),
-    ];
-
-    // Initialize revenue data
-    _revenueData = List.generate(
-      7,
-      (index) => BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: 75000 + (index * 2000) + Random().nextInt(10000).toDouble(),
-            color: AppTheme.success,
-            width: 20,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
-      ),
-    );
-
-    // Initialize chicken count data
-    _chickenCountData = [
-      const FlSpot(0, 250),
-      const FlSpot(1, 248),
-      const FlSpot(2, 247),
-      const FlSpot(3, 245),
-      const FlSpot(4, 244),
-      const FlSpot(5, 243),
-      const FlSpot(6, 242),
-    ];
-  }
-
-  void _startRealTimeUpdates() {
-    _realTimeTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (_isLiveMode && mounted) {
-        _updateRealTimeData();
-      }
-    });
-  }
-
-  void _updateRealTimeData() {
-    setState(() {
-      // Update stats with small random changes
-      _currentEggs += Random().nextInt(5) - 2; // -2 to +2
-      _currentEggs = _currentEggs.clamp(20, 40);
-
-      _currentProfit += Random().nextInt(10000) - 5000; // -5000 to +5000
-      _currentProfit = _currentProfit.clamp(50000, 100000);
-
-      _mortalityRate += (Random().nextDouble() - 0.5) * 0.2; // Small changes
-      _mortalityRate = _mortalityRate.clamp(1.0, 4.0);
-
-      if (Random().nextBool()) {
-        _activeCustomers += Random().nextBool() ? 1 : -1;
-        _activeCustomers = _activeCustomers.clamp(8, 20);
-      }
-
-      // Update chart data
-      _updateChartData();
-    });
-
-    // Trigger fade animation for smooth updates
-    _fadeController?.forward().then((_) {
-      _fadeController?.reverse();
-    });
-  }
-
-  void _updateChartData() {
-    // Update egg trend (shift data and add new point)
-    if (_eggTrendData.length >= 7) {
-      _eggTrendData.removeAt(0);
-      for (int i = 0; i < _eggTrendData.length; i++) {
-        _eggTrendData[i] = FlSpot(i.toDouble(), _eggTrendData[i].y);
-      }
-    }
-    _eggTrendData.add(FlSpot(6, _currentEggs.toDouble()));
-
-    // Update revenue data
-    if (_revenueData.length >= 7) {
-      _revenueData.removeAt(0);
-      for (int i = 0; i < _revenueData.length; i++) {
-        _revenueData[i] = BarChartGroupData(
-          x: i,
-          barRods: _revenueData[i].barRods,
-        );
-      }
-    }
-    _revenueData.add(
-      BarChartGroupData(
-        x: 6,
-        barRods: [
-          BarChartRodData(
-            toY: _currentProfit.toDouble(),
-            color: AppTheme.success,
-            width: 20,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
-      ),
-    );
-
-    // Update chicken count (gradual decrease with occasional increase)
-    if (_chickenCountData.length >= 7) {
-      _chickenCountData.removeAt(0);
-      for (int i = 0; i < _chickenCountData.length; i++) {
-        _chickenCountData[i] = FlSpot(i.toDouble(), _chickenCountData[i].y);
-      }
-    }
-    double lastCount = _chickenCountData.last.y;
-    double newCount =
-        lastCount + (Random().nextDouble() - 0.7) * 2; // Slight decrease trend
-    _chickenCountData.add(FlSpot(6, newCount.clamp(200, 300)));
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _pulseController?.dispose();
-    _fadeController?.dispose();
-    _realTimeTimer?.cancel();
     super.dispose();
   }
 
@@ -189,53 +35,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       backgroundColor: const Color(0xFFF8FAF9),
       appBar: AppBar(
         title: const Text(
-          'Tahlillar va Statistika',
+          'Tahlillar va Hisobotlar',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: AppTheme.primaryColor,
         elevation: 0,
         actions: [
-          // Live indicator
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: AnimatedBuilder(
-              animation: _pulseController ?? const AlwaysStoppedAnimation(0.0),
-              builder: (context, child) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _isLiveMode ? Colors.red : Colors.grey,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isLiveMode ? 'LIVE' : 'OFF',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
           PopupMenuButton<int>(
             onSelected: (value) {
               setState(() {
@@ -274,7 +79,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               tabs: const [
                 Tab(icon: Icon(Icons.dashboard_outlined), text: 'Umumiy'),
                 Tab(icon: Icon(Icons.analytics_outlined), text: 'Grafiklar'),
-                Tab(icon: Icon(Icons.emoji_events_outlined), text: 'Yutuqlar'),
+                Tab(icon: Icon(Icons.report_outlined), text: 'Hisobotlar'),
               ],
             ),
           ),
@@ -284,184 +89,169 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               children: [
                 _buildOverviewTab(),
                 _buildChartsTab(),
-                _buildAchievementsTab(),
+                _buildReportsTab(),
               ],
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'analytics_fab',
-        onPressed: () {
-          setState(() {
-            _isLiveMode = !_isLiveMode;
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                _isLiveMode
-                    ? 'Real-time yangilanish yoqildi'
-                    : 'Real-time yangilanish o\'chirildi',
-              ),
-              backgroundColor: _isLiveMode ? AppTheme.success : Colors.grey,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        },
-        backgroundColor: _isLiveMode ? AppTheme.success : Colors.grey,
-        child: Icon(_isLiveMode ? Icons.pause : Icons.play_arrow),
-      ),
     );
   }
 
+  // Copy the content from the simple analytics screen
   Widget _buildOverviewTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Smart Analytics Hints with enhanced design
-          _buildSmartHints(),
+    return Consumer<FarmProvider>(
+      builder: (context, farmProvider, child) {
+        final farm = farmProvider.farm;
+        final chicken = farm?.chicken;
+        final egg = farm?.egg;
+        final customers = farm?.customers ?? [];
 
-          const SizedBox(height: 24),
-
-          // Key Statistics Header
-          Row(
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.bar_chart, color: AppTheme.primaryColor, size: 24),
-              const SizedBox(width: 8),
-              const Text(
-                'Asosiy ko\'rsatkichlar',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2D3748),
-                ),
+              // Key Statistics Header
+              Row(
+                children: [
+                  Icon(Icons.bar_chart, color: AppTheme.primaryColor, size: 24),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Asosiy ko\'rsatkichlar',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3748),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
 
-          const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-          // Enhanced Stats Cards with real-time data
-          AnimatedBuilder(
-            animation: _fadeController ?? const AlwaysStoppedAnimation(0.0),
-            builder: (context, child) {
-              return Opacity(
-                opacity: 1.0 - ((_fadeController?.value ?? 0.0) * 0.3),
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.1,
-                  children: [
-                    _buildEnhancedStatsCard(
-                      title: 'O\'rtacha tuxum',
-                      value: _currentEggs.toString(),
-                      subtitle: 'fletka/kun',
-                      icon: Icons.egg_outlined,
-                      color: AppTheme.accentColor,
-                      trend: '+5%',
-                      isPositive: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.accentColor,
-                          AppTheme.accentColor.withOpacity(0.7),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+              // Stats Cards with real farm data
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.1,
+                children: [
+                  _buildEnhancedStatsCard(
+                    title: 'Joriy tuxum',
+                    value: '${egg?.currentStock ?? 0}',
+                    subtitle: 'fletka',
+                    icon: Icons.egg_outlined,
+                    color: AppTheme.accentColor,
+                    trend: '+${egg?.todayProduction ?? 0}',
+                    isPositive: true,
+                  ),
+                  _buildEnhancedStatsCard(
+                    title: 'Tovuqlar soni',
+                    value: '${chicken?.currentCount ?? 0}',
+                    subtitle: 'tovuq',
+                    icon: Icons.pets,
+                    color: AppTheme.success,
+                    trend:
+                        '${chicken?.todayDeaths != null && chicken!.todayDeaths > 0 ? '-${chicken.todayDeaths}' : '0'}',
+                    isPositive: (chicken?.todayDeaths ?? 0) == 0,
+                  ),
+                  _buildEnhancedStatsCard(
+                    title: 'Mijozlar',
+                    value: '${customers.length}',
+                    subtitle: 'mijoz',
+                    icon: Icons.people_outline,
+                    color: AppTheme.info,
+                    trend: '+0',
+                    isPositive: true,
+                  ),
+                  _buildEnhancedStatsCard(
+                    title: 'Qarzlar',
+                    value: '${customers.where((c) => c.totalDebt > 0).length}',
+                    subtitle: 'qarzli mijoz',
+                    icon: Icons.account_balance_wallet,
+                    color: AppTheme.warning,
+                    trend:
+                        '${customers.fold<double>(0, (sum, c) => sum + c.totalDebt).toStringAsFixed(0)} so\'m',
+                    isPositive: false,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Farm Summary
+              Row(
+                children: [
+                  Icon(Icons.timeline, color: AppTheme.primaryColor, size: 24),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Ferma xulosasi',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3748),
                     ),
-                    _buildEnhancedStatsCard(
-                      title: 'O\'rtacha foyda',
-                      value: '${(_currentProfit / 1000).toStringAsFixed(0)}K',
-                      subtitle: 'som/kun',
-                      icon: Icons.trending_up,
-                      color: AppTheme.success,
-                      trend: '+12%',
-                      isPositive: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.success,
-                          AppTheme.success.withOpacity(0.7),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    _buildEnhancedStatsCard(
-                      title: 'Tovuq o\'limi',
-                      value: '${_mortalityRate.toStringAsFixed(1)}%',
-                      subtitle: 'bu oy',
-                      icon: Icons.warning_outlined,
-                      color: AppTheme.warning,
-                      trend: '-1%',
-                      isPositive: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.warning,
-                          AppTheme.warning.withOpacity(0.7),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    _buildEnhancedStatsCard(
-                      title: 'Mijozlar',
-                      value: _activeCustomers.toString(),
-                      subtitle: 'faol mijozlar',
-                      icon: Icons.people_outline,
-                      color: AppTheme.info,
-                      trend: '+2',
-                      isPositive: true,
-                      gradient: LinearGradient(
-                        colors: [AppTheme.info, AppTheme.info.withOpacity(0.7)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 24),
-
-          // Progress Visualization with enhanced design
-          Row(
-            children: [
-              Icon(Icons.timeline, color: AppTheme.primaryColor, size: 24),
-              const SizedBox(width: 8),
-              const Text(
-                'Taraqqiyot',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2D3748),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bugungi holatlar',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildSummaryRow(
+                      'Bugungi tuxum yig\'imi',
+                      '${egg?.todayProduction ?? 0} fletka',
+                    ),
+                    _buildSummaryRow(
+                      'Bugungi o\'limlar',
+                      '${chicken?.todayDeaths ?? 0} tovuq',
+                    ),
+                    _buildSummaryRow(
+                      'Umumiy zaxira',
+                      '${egg?.currentStock ?? 0} fletka',
+                    ),
+                    _buildSummaryRow(
+                      'Faol mijozlar',
+                      '${customers.length} mijoz',
+                    ),
+                    _buildSummaryRow(
+                      'Qarzlar miqdori',
+                      '${customers.fold<double>(0, (sum, c) => sum + c.totalDebt).toStringAsFixed(0)} so\'m',
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-
-          const SizedBox(height: 16),
-
-          ProgressVisualization(
-            progress: AchievementProgress(
-              totalPoints: 1250,
-              currentLevel: 5,
-              nextLevelPoints: 1500,
-              consecutiveDays: 15,
-              totalEggs: 850,
-              totalProfit: 2250000,
-              healthyDays: 12,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

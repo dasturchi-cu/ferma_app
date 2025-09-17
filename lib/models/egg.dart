@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'package:json_annotation/json_annotation.dart';
+import '../utils/uuid_generator.dart';
 
 part 'egg.g.dart';
 
@@ -405,9 +406,22 @@ class Egg {
   void addProduction(int trayCount, {String? note}) {
     production.add(
       EggProduction(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: UuidGenerator.generateUuid(),
         trayCount: trayCount,
         date: DateTime.now(),
+        note: note,
+      ),
+    );
+    updatedAt = DateTime.now();
+  }
+
+  // Ishlab chiqarish qo'shish (berilgan ID bilan)
+  void addProductionWithId(String id, int trayCount, DateTime date, {String? note}) {
+    production.add(
+      EggProduction(
+        id: id,
+        trayCount: trayCount,
+        date: date,
         note: note,
       ),
     );
@@ -418,10 +432,24 @@ class Egg {
   void addSale(int trayCount, double pricePerTray, {String? note}) {
     sales.add(
       EggSale(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: UuidGenerator.generateUuid(),
         trayCount: trayCount,
         pricePerTray: pricePerTray,
         date: DateTime.now(),
+        note: note,
+      ),
+    );
+    updatedAt = DateTime.now();
+  }
+
+  // Sotuv qo'shish (berilgan ID bilan)
+  void addSaleWithId(String id, int trayCount, double pricePerTray, DateTime date, {String? note}) {
+    sales.add(
+      EggSale(
+        id: id,
+        trayCount: trayCount,
+        pricePerTray: pricePerTray,
+        date: date,
         note: note,
       ),
     );
@@ -432,9 +460,22 @@ class Egg {
   void addBroken(int trayCount, {String? note}) {
     brokenEggs.add(
       BrokenEgg(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: UuidGenerator.generateUuid(),
         trayCount: trayCount,
         date: DateTime.now(),
+        note: note,
+      ),
+    );
+    updatedAt = DateTime.now();
+  }
+
+  // Siniq tuxum qo'shish (berilgan ID bilan)
+  void addBrokenWithId(String id, int trayCount, DateTime date, {String? note}) {
+    brokenEggs.add(
+      BrokenEgg(
+        id: id,
+        trayCount: trayCount,
+        date: date,
         note: note,
       ),
     );
@@ -445,9 +486,22 @@ class Egg {
   void addLarge(int trayCount, {String? note}) {
     largeEggs.add(
       LargeEgg(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: UuidGenerator.generateUuid(),
         trayCount: trayCount,
         date: DateTime.now(),
+        note: note,
+      ),
+    );
+    updatedAt = DateTime.now();
+  }
+
+  // Katta tuxum qo'shish (berilgan ID bilan)
+  void addLargeWithId(String id, int trayCount, DateTime date, {String? note}) {
+    largeEggs.add(
+      LargeEgg(
+        id: id,
+        trayCount: trayCount,
+        date: date,
         note: note,
       ),
     );

@@ -212,7 +212,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
                             ),
                             StatCard(
                               title: 'Umumiy O\'limlar',
-                              value: '${chicken.deathStats['totalDeaths']}',
+                              value: '${chicken.deathStats['totalDeaths'] ?? 0}',
                               icon: Icons.error,
                               color: AppConstants.errorColor,
                             ),
@@ -233,7 +233,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius:
-                                  BorderRadius.circular(AppConstants.mediumRadius),
+                              BorderRadius.circular(AppConstants.mediumRadius),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.1),
@@ -264,7 +264,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
                                 const Divider(),
                                 _buildStatRow(
                                   'O\'rtacha kunlik o\'lim',
-                                  '${chicken.deathStats['averageDeaths'].toStringAsFixed(1)} ta',
+                                  '${(chicken.deathStats['averageDeaths'] ?? 0.0).toStringAsFixed(1)} ta',
                                   Icons.analytics,
                                   AppConstants.infoColor,
                                 ),
@@ -286,7 +286,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius:
-                                  BorderRadius.circular(AppConstants.mediumRadius),
+                              BorderRadius.circular(AppConstants.mediumRadius),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.1),
@@ -302,13 +302,13 @@ class _ChickensScreenState extends State<ChickensScreen> {
                                   ? 5
                                   : chicken.deaths.length,
                               separatorBuilder: (context, index) =>
-                                  const Divider(height: 1),
+                              const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final death = chicken.deaths.reversed.toList()[index];
                                 return ListTile(
                                   leading: CircleAvatar(
                                     backgroundColor:
-                                        AppConstants.errorColor.withOpacity(0.1),
+                                    AppConstants.errorColor.withOpacity(0.1),
                                     child: Icon(
                                       Icons.remove,
                                       color: AppConstants.errorColor,
@@ -320,9 +320,9 @@ class _ChickensScreenState extends State<ChickensScreen> {
                                   ),
                                   trailing: death.note != null
                                       ? Tooltip(
-                                          message: death.note!,
-                                          child: const Icon(Icons.note),
-                                        )
+                                    message: death.note!,
+                                    child: const Icon(Icons.note),
+                                  )
                                       : null,
                                 );
                               },
@@ -359,24 +359,24 @@ class _ChickensScreenState extends State<ChickensScreen> {
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
-  
+
   Widget _buildModernStatCard(
-    String title,
-    String value,
-    String unit,
-    IconData icon,
-    Color accentColor,
-  ) {
+      String title,
+      String value,
+      String unit,
+      IconData icon,
+      Color accentColor,
+      ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -390,7 +390,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
-            offset: const Offset(0, 2),
+            offset: const Offset(2, 2),
           ),
         ],
       ),
@@ -506,19 +506,19 @@ class _ChickensScreenState extends State<ChickensScreen> {
               final count = int.tryParse(controller.text);
               if (count != null && count > 0) {
                 final farmProvider =
-                    Provider.of<FarmProvider>(context, listen: false);
+                Provider.of<FarmProvider>(context, listen: false);
                 final success = await farmProvider.addChickens(count);
 
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
 
-                if (success) {
+                if (success && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('$count ta tovuq qo\'shildi'),
                       backgroundColor: AppConstants.successColor,
                     ),
                   );
-                } else {
+                } else if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
@@ -561,19 +561,19 @@ class _ChickensScreenState extends State<ChickensScreen> {
               final count = int.tryParse(controller.text);
               if (count != null && count > 0) {
                 final farmProvider =
-                    Provider.of<FarmProvider>(context, listen: false);
+                Provider.of<FarmProvider>(context, listen: false);
                 final success = await farmProvider.addChickenDeath(count);
 
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
 
-                if (success) {
+                if (success && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('$count ta tovuq o\'limi kiritildi'),
                       backgroundColor: AppConstants.warningColor,
                     ),
                   );
-                } else {
+                } else if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
@@ -586,7 +586,7 @@ class _ChickensScreenState extends State<ChickensScreen> {
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppConstants.errorColor),
             child:
-                const Text('Kiritish', style: TextStyle(color: Colors.white)),
+            const Text('Kiritish', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

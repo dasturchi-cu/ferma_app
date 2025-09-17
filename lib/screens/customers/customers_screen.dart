@@ -23,9 +23,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
         elevation: 0,
       ),
       body: Consumer<FarmProvider>(
-      builder: (context, farmProvider, child) {
-        final farm = farmProvider.farm;
-        final customers = farmProvider.getRegularCustomers(); // Only regular customers
+        builder: (context, farmProvider, child) {
+          final farm = farmProvider.farm;
+          final customers = farmProvider
+              .getRegularCustomers(); // Only regular customers
 
           return Column(
             children: [
@@ -36,10 +37,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFF667eea),
-                      const Color(0xFF764ba2),
-                    ],
+                    colors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -123,7 +121,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 '${customers.fold<double>(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)}',
                                 "so'm",
                                 Icons.account_balance_wallet_outlined,
-                                customers.any((c) => c.totalDebt > 0) 
+                                customers.any((c) => c.totalDebt > 0)
                                     ? Colors.orange[300]!
                                     : Colors.green[300]!,
                               ),
@@ -162,10 +160,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF667eea),
-              const Color(0xFF764ba2),
-            ],
+            colors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
@@ -185,9 +180,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           icon: const Icon(Icons.person_add_rounded),
           label: const Text(
             'Mijoz qo\'shish',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -206,10 +199,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -229,11 +219,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   color: accentColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: accentColor,
-                  size: 20,
-                ),
+                child: Icon(icon, color: accentColor, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -572,10 +558,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
-                  colors: [
-                    const Color(0xFF667eea),
-                    const Color(0xFF764ba2),
-                  ],
+                  colors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
                 ),
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
@@ -588,10 +571,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               ),
               child: ElevatedButton.icon(
                 onPressed: () => _showAddCustomerDialog(context),
-                icon: const Icon(
-                  Icons.person_add_rounded,
-                  color: Colors.white,
-                ),
+                icon: const Icon(Icons.person_add_rounded, color: Colors.white),
                 label: const Text(
                   'Birinchi mijozni qo\'shish',
                   style: TextStyle(
@@ -798,22 +778,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 // Safe navigation check
                 if (context.mounted) {
                   Navigator.pop(context);
-                }
 
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Mijoz ma\'lumotlari yangilandi'),
-                      backgroundColor: AppConstants.successColor,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                      backgroundColor: AppConstants.errorColor,
-                    ),
-                  );
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Mijoz ma\'lumotlari yangilandi'),
+                        backgroundColor: AppConstants.successColor,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          farmProvider.error ?? 'Xatolik yuz berdi',
+                        ),
+                        backgroundColor: AppConstants.errorColor,
+                      ),
+                    );
+                  }
                 }
               }
             },
@@ -1036,7 +1018,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               // Statistics
               Container(
                 padding: const EdgeInsets.all(16),
@@ -1074,7 +1056,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               // Orders list
               Expanded(
                 child: customer.orders.isEmpty
@@ -1100,9 +1082,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       )
                     : ListView.separated(
                         itemCount: customer.orders.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 8),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
                         itemBuilder: (context, index) {
-                          final order = customer.orders.reversed.toList()[index];
+                          final order = customer.orders.reversed
+                              .toList()[index];
                           return Container(
                             margin: const EdgeInsets.only(bottom: 2),
                             decoration: BoxDecoration(
@@ -1110,8 +1094,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                                 colors: order.isPaid
-                                    ? [AppConstants.successColor.withOpacity(0.1), Colors.green.withOpacity(0.05)]
-                                    : [AppConstants.errorColor.withOpacity(0.1), Colors.orange.withOpacity(0.05)],
+                                    ? [
+                                        AppConstants.successColor.withOpacity(
+                                          0.1,
+                                        ),
+                                        Colors.green.withOpacity(0.05),
+                                      ]
+                                    : [
+                                        AppConstants.errorColor.withOpacity(
+                                          0.1,
+                                        ),
+                                        Colors.orange.withOpacity(0.05),
+                                      ],
                               ),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
@@ -1122,7 +1116,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (order.isPaid ? Colors.green : Colors.orange).withOpacity(0.1),
+                                  color:
+                                      (order.isPaid
+                                              ? Colors.green
+                                              : Colors.orange)
+                                          .withOpacity(0.1),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -1141,20 +1139,34 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(
                                             colors: order.isPaid
-                                                ? [AppConstants.successColor, Colors.green[600]!]
-                                                : [AppConstants.errorColor, Colors.orange[600]!],
+                                                ? [
+                                                    AppConstants.successColor,
+                                                    Colors.green[600]!,
+                                                  ]
+                                                : [
+                                                    AppConstants.errorColor,
+                                                    Colors.orange[600]!,
+                                                  ],
                                           ),
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: (order.isPaid ? Colors.green : Colors.orange).withOpacity(0.3),
+                                              color:
+                                                  (order.isPaid
+                                                          ? Colors.green
+                                                          : Colors.orange)
+                                                      .withOpacity(0.3),
                                               blurRadius: 4,
                                               offset: const Offset(0, 2),
                                             ),
                                           ],
                                         ),
                                         child: Icon(
-                                          order.isPaid ? Icons.check_circle : Icons.access_time,
+                                          order.isPaid
+                                              ? Icons.check_circle
+                                              : Icons.access_time,
                                           color: Colors.white,
                                           size: 18,
                                         ),
@@ -1162,10 +1174,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              order.trayCount > 0 
+                                              order.trayCount > 0
                                                   ? '${order.trayCount} fletka tuxum'
                                                   : 'Qo\'lda qo\'shilgan qarz',
                                               style: const TextStyle(
@@ -1175,7 +1188,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              _formatDateTime(order.deliveryDate),
+                                              _formatDateTime(
+                                                order.deliveryDate,
+                                              ),
                                               style: TextStyle(
                                                 color: Colors.grey[600],
                                                 fontSize: 12,
@@ -1185,7 +1200,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                         ),
                                       ),
                                       Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
                                         children: [
                                           Text(
                                             '${order.totalAmount.toStringAsFixed(0)} so\'m',
@@ -1195,7 +1211,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                             ),
                                           ),
                                           Text(
-                                            order.isPaid ? 'To\'landi' : 'Qarzdorlik',
+                                            order.isPaid
+                                                ? 'To\'landi'
+                                                : 'Qarzdorlik',
                                             style: TextStyle(
                                               color: order.isPaid
                                                   ? AppConstants.successColor
@@ -1208,7 +1226,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                       ),
                                     ],
                                   ),
-                                  
+
                                   // Order details
                                   if (order.note?.isNotEmpty ?? false)
                                     const SizedBox(height: 12),
@@ -1229,25 +1247,34 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                         ),
                                       ),
                                     ),
-                                  
+
                                   // Actions
-                                  if (!order.isPaid)
-                                    const SizedBox(height: 12),
+                                  if (!order.isPaid) const SizedBox(height: 12),
                                   if (!order.isPaid)
                                     SizedBox(
                                       width: double.infinity,
                                       child: ElevatedButton.icon(
                                         onPressed: () {
                                           Navigator.pop(context);
-                                          _showMarkAsPaidDialog(context, customer, order);
+                                          _showMarkAsPaidDialog(
+                                            context,
+                                            customer,
+                                            order,
+                                          );
                                         },
-                                        icon: const Icon(Icons.payment, size: 16),
+                                        icon: const Icon(
+                                          Icons.payment,
+                                          size: 16,
+                                        ),
                                         label: const Text('To\'lash'),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppConstants.successColor,
+                                          backgroundColor:
+                                              AppConstants.successColor,
                                           foregroundColor: Colors.white,
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -1265,8 +1292,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ),
     );
   }
-  
-  Widget _buildOrderStat(String title, String value, IconData icon, Color color) {
+
+  Widget _buildOrderStat(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Column(
       children: [
         Icon(icon, color: color, size: 20),
@@ -1279,29 +1311,33 @@ class _CustomersScreenState extends State<CustomersScreen> {
             fontSize: 14,
           ),
         ),
-        Text(
-          title,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 12,
-          ),
-        ),
+        Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
       ],
     );
   }
-  
+
   String _formatDateTime(DateTime dateTime) {
     final months = [
-      'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
-      'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'
+      'Yanvar',
+      'Fevral',
+      'Mart',
+      'Aprel',
+      'May',
+      'Iyun',
+      'Iyul',
+      'Avgust',
+      'Sentabr',
+      'Oktabr',
+      'Noyabr',
+      'Dekabr',
     ];
-    
+
     final day = dateTime.day.toString().padLeft(2, '0');
     final month = months[dateTime.month - 1];
     final year = dateTime.year;
     final hour = dateTime.hour.toString().padLeft(2, '0');
     final minute = dateTime.minute.toString().padLeft(2, '0');
-    
+
     return '$day $month $year, $hour:$minute';
   }
 
@@ -1488,7 +1524,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               if (formKey.currentState!.validate()) {
                 final count = int.parse(trayController.text);
                 final price = double.parse(priceController.text);
-                
+
                 final success = await farmProvider.addCustomerEggSale(
                   customer.id,
                   count,
@@ -1497,32 +1533,33 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
                 Navigator.pop(context);
 
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '${customer.name} ga $count fletka tuxum sotildi. Qarz: ${(count * price).toStringAsFixed(0)} so\'m',
+                if (context.mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '${customer.name} ga $count fletka tuxum sotildi. Qarz: ${(count * price).toStringAsFixed(0)} so\'m',
+                        ),
+                        backgroundColor: AppConstants.successColor,
                       ),
-                      backgroundColor: AppConstants.successColor,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                      backgroundColor: AppConstants.errorColor,
-                    ),
-                  );
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          farmProvider.error ?? 'Xatolik yuz berdi',
+                        ),
+                        backgroundColor: AppConstants.errorColor,
+                      ),
+                    );
+                  }
                 }
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.accentColor,
             ),
-            child: const Text(
-              'Sotish',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: const Text('Sotish', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

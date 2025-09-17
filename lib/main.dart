@@ -20,7 +20,7 @@ import 'utils/modern_theme.dart';
 import 'services/notification_service.dart';
 import 'services/activity_log_service.dart';
 import 'services/inventory_service.dart';
-import 'models/farm.dart'; // Model fayllarini import qilish
+import 'models/farm.dart';
 import 'models/chicken.dart';
 import 'models/egg.dart';
 import 'models/activity_log.dart';
@@ -99,17 +99,6 @@ Future<void> initializeApp() async {
   // Hive va Supabase'ni ishga tushirish
   await Hive.initFlutter();
 
-  // Adapterlarni ro'yxatdan o'tkazish
-  // print('📦 Hive adapterlarini ro\'yxatga olish...');
-  // Hive.registerAdapter(FarmProvider());
-  // Hive.registerAdapter(ChickenAdapter());
-  // Hive.registerAdapter(EggsScreen() as TypeAdapter);
-  // Hive.registerAdapter(EggProductionAdapter());
-  // Hive.registerAdapter(EggsScreen() as TypeAdapter);
-  // Hive.registerAdapter(ActivityLogAdapter());
-  // Hive.registerAdapter(InventoryItemAdapter());
-  // Hive.registerAdapter(InventoryTransactionAdapter());
-
   // Eski boxlarni tozalash
   await _cleanupOldHiveBoxes();
 
@@ -128,19 +117,19 @@ Future<void> initializeApp() async {
   await InventoryService.initialize();
 }
 
-void main() async {
-  BindingBase.debugZoneErrorsAreFatal = true;
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  // Zone xatolarini faqatgina developmentda o'chirish
+  if (kDebugMode) {
+    BindingBase.debugZoneErrorsAreFatal = false;
+  }
 
-  runZonedGuarded<Future<void>>(
-        () async {
-      await initializeApp();
-      runApp(const FermaApp());
-    },
-        (error, stackTrace) {
-      debugPrint('Uncaught error: $error\n$stackTrace');
-    },
-  );
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await initializeApp();
+    runApp(const FermaApp());
+  }, (error, stackTrace) {
+    debugPrint('Uncaught error: $error\n$stackTrace');
+  });
 }
 
 class FermaApp extends StatefulWidget {
