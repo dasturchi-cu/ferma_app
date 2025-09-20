@@ -21,6 +21,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
         backgroundColor: AppConstants.accentColor,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          Consumer<FarmProvider>(
+            builder: (context, farmProvider, child) {
+              return IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () async {
+                  await farmProvider.refreshData();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ma\'lumotlar yangilandi'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+              );
+            },
+          ),
+        ],
       ),
       body: Consumer<FarmProvider>(
         builder: (context, farmProvider, child) {
@@ -664,33 +684,48 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   context,
                   listen: false,
                 );
+
+                // Store the navigator for safe use after async operation
+                final navigator = Navigator.of(context);
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                final customerName = nameController.text.trim();
+
+                // Close dialog first
+                navigator.pop();
+
+                // Show loading indicator
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Mijoz qo\'shilmoqda...'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+
                 final success = await farmProvider.addCustomer(
-                  nameController.text.trim(),
+                  customerName,
                   phone: phoneController.text.trim(),
                   address: addressController.text.trim(),
                 );
 
-                // Safe navigation check
+                // Check if widget is still mounted before showing result
                 if (context.mounted) {
-                  Navigator.pop(context);
-                }
-
-                if (success && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '${nameController.text.trim()} mijoz qo\'shildi',
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$customerName mijoz qo\'shildi'),
+                        backgroundColor: AppConstants.successColor,
                       ),
-                      backgroundColor: AppConstants.successColor,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                      backgroundColor: AppConstants.errorColor,
-                    ),
-                  );
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          farmProvider.error ?? 'Xatolik yuz berdi',
+                        ),
+                        backgroundColor: AppConstants.errorColor,
+                      ),
+                    );
+                  }
                 }
               }
             },

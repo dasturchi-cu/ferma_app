@@ -37,9 +37,19 @@ class _DebtsScreenState extends State<DebtsScreen>
 
   List<Customer> _getFilteredDebts(List<Customer> customers) {
     // Get all customers with debt (both regular and debt-only)
-    final regularCustomersWithDebt = customers.where((customer) => !customer.name.startsWith('QARZ:') && customer.totalDebt > 0).toList();
-    final debtOnlyCustomers = customers.where((customer) => customer.name.startsWith('QARZ:') && customer.totalDebt > 0).toList();
-    
+    final regularCustomersWithDebt = customers
+        .where(
+          (customer) =>
+              !customer.name.startsWith('QARZ:') && customer.totalDebt > 0,
+        )
+        .toList();
+    final debtOnlyCustomers = customers
+        .where(
+          (customer) =>
+              customer.name.startsWith('QARZ:') && customer.totalDebt > 0,
+        )
+        .toList();
+
     // Clean debt customer names (remove QARZ: prefix for display)
     final cleanedDebtCustomers = debtOnlyCustomers.map((customer) {
       return Customer(
@@ -50,9 +60,12 @@ class _DebtsScreenState extends State<DebtsScreen>
         orders: customer.orders,
       );
     }).toList();
-    
-    final allCustomersWithDebt = [...regularCustomersWithDebt, ...cleanedDebtCustomers];
-    
+
+    final allCustomersWithDebt = [
+      ...regularCustomersWithDebt,
+      ...cleanedDebtCustomers,
+    ];
+
     if (_searchQuery.isEmpty) return allCustomersWithDebt;
     return allCustomersWithDebt
         .where(
@@ -74,7 +87,7 @@ class _DebtsScreenState extends State<DebtsScreen>
         final customers = farm?.customers ?? [];
         final filteredDebts = _getFilteredDebts(customers);
         final totalDebt = _getTotalDebt(customers);
-        
+
         return Scaffold(
           backgroundColor: Colors.grey[50],
           body: Column(
@@ -86,10 +99,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFFFF7043),
-                      const Color(0xFFFF8A65),
-                    ],
+                    colors: [const Color(0xFFFF7043), const Color(0xFFFF8A65)],
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -194,7 +204,9 @@ class _DebtsScreenState extends State<DebtsScreen>
                                 '${totalDebt.toStringAsFixed(0)}',
                                 "so'm",
                                 Icons.account_balance_wallet_outlined,
-                                totalDebt > 0 ? Colors.red[300]! : Colors.green[300]!,
+                                totalDebt > 0
+                                    ? Colors.red[300]!
+                                    : Colors.green[300]!,
                               ),
                             ),
                           ],
@@ -205,11 +217,14 @@ class _DebtsScreenState extends State<DebtsScreen>
                 ),
               ),
               // Qidiruv paneli
-              if (customers.where((c) => c.totalDebt > 0).isNotEmpty) _buildSearchBar(),
+              if (customers.where((c) => c.totalDebt > 0).isNotEmpty)
+                _buildSearchBar(),
 
               // Asosiy kontent
               Expanded(
-                child: filteredDebts.isEmpty && customers.where((c) => c.totalDebt > 0).isNotEmpty
+                child:
+                    filteredDebts.isEmpty &&
+                        customers.where((c) => c.totalDebt > 0).isNotEmpty
                     ? _buildNotFound()
                     : customers.where((c) => c.totalDebt > 0).isEmpty
                     ? _buildEmpty()
@@ -222,10 +237,7 @@ class _DebtsScreenState extends State<DebtsScreen>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFFFF7043),
-                  const Color(0xFFFF8A65),
-                ],
+                colors: [const Color(0xFFFF7043), const Color(0xFFFF8A65)],
               ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
@@ -245,9 +257,7 @@ class _DebtsScreenState extends State<DebtsScreen>
               icon: const Icon(Icons.person_add_rounded),
               label: const Text(
                 'Yangi mijoz',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -318,10 +328,7 @@ class _DebtsScreenState extends State<DebtsScreen>
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -341,11 +348,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                   color: accentColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: accentColor,
-                  size: 20,
-                ),
+                child: Icon(icon, color: accentColor, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -390,7 +393,7 @@ class _DebtsScreenState extends State<DebtsScreen>
       ),
     );
   }
-  
+
   Widget _buildStatItem({
     required IconData icon,
     required String label,
@@ -721,11 +724,13 @@ class _DebtsScreenState extends State<DebtsScreen>
                 TextFormField(
                   controller: nameController,
                   decoration: const InputDecoration(
-                    labelText: 'Qarzgor ismi',
+                    labelText: 'Qarzdor ismi',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.person),
                   ),
-                  validator: (v) => (v?.trim().isEmpty ?? true) ? 'Ism kiritish majburiy' : null,
+                  validator: (v) => (v?.trim().isEmpty ?? true)
+                      ? 'Ism kiritish majburiy'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -737,7 +742,8 @@ class _DebtsScreenState extends State<DebtsScreen>
                     prefixIcon: Icon(Icons.phone),
                   ),
                   validator: (v) {
-                    if (v?.trim().isEmpty ?? true) return 'Telefon kiritish majburiy';
+                    if (v?.trim().isEmpty ?? true)
+                      return 'Telefon kiritish majburiy';
                     final digits = v!.replaceAll(RegExp(r'\D'), '');
                     if (digits.length < 7) return 'Telefon raqami juda qisqa';
                     return null;
@@ -793,7 +799,10 @@ class _DebtsScreenState extends State<DebtsScreen>
           ElevatedButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
-                final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+                final farmProvider = Provider.of<FarmProvider>(
+                  context,
+                  listen: false,
+                );
                 final success = await farmProvider.addManualDebt(
                   customerName: nameController.text.trim(),
                   customerPhone: phoneController.text.trim(),
@@ -805,7 +814,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                 // Safe navigation check
                 if (context.mounted) {
                   Navigator.pop(context);
-                  
+
                   if (success) {
                     _showSnackBar(
                       '${nameController.text.trim()} ga ${debtController.text} so\'m qarz qo\'shildi',
@@ -832,8 +841,10 @@ class _DebtsScreenState extends State<DebtsScreen>
   }
 
   void _showPaymentDialog(Customer customer) {
-    final unpaidOrders = customer.orders.where((order) => !order.isPaid).toList();
-    
+    final unpaidOrders = customer.orders
+        .where((order) => !order.isPaid)
+        .toList();
+
     if (unpaidOrders.isEmpty) {
       _showSnackBar('Bu mijozda to\'lanmagan buyurtmalar yo\'q', Colors.orange);
       return;
@@ -864,7 +875,10 @@ class _DebtsScreenState extends State<DebtsScreen>
             children: [
               Text(
                 'Mijoz: ${customer.name}',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -872,8 +886,10 @@ class _DebtsScreenState extends State<DebtsScreen>
                 style: TextStyle(color: Colors.grey[600], fontSize: 14),
               ),
               const SizedBox(height: 16),
-              const Text('To\'lanmagan buyurtmalar:', 
-                style: TextStyle(fontWeight: FontWeight.w500)),
+              const Text(
+                'To\'lanmagan buyurtmalar:',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 height: 200,
@@ -892,10 +908,16 @@ class _DebtsScreenState extends State<DebtsScreen>
                         ),
                         trailing: ElevatedButton(
                           onPressed: () async {
-                            final success = await _markOrderAsPaid(customer.id, order.id);
+                            final success = await _markOrderAsPaid(
+                              customer.id,
+                              order.id,
+                            );
                             if (success) {
                               if (mounted) Navigator.pop(context);
-                              _showSnackBar('Buyurtma to\'landi!', Colors.green);
+                              _showSnackBar(
+                                'Buyurtma to\'landi!',
+                                Colors.green,
+                              );
                             } else {
                               _showSnackBar('Xatolik yuz berdi', Colors.red);
                             }
@@ -903,9 +925,15 @@ class _DebtsScreenState extends State<DebtsScreen>
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                           ),
-                          child: const Text('To\'lash', style: TextStyle(fontSize: 12)),
+                          child: const Text(
+                            'To\'lash',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ),
                       ),
                     );
@@ -1109,18 +1137,31 @@ class _DebtsScreenState extends State<DebtsScreen>
 
   void _showStatistics(List<Customer> customers) {
     final customersWithDebt = customers.where((c) => c.totalDebt > 0).toList();
-    
+
     if (customersWithDebt.isEmpty) {
-      _showSnackBar('Statistika ko\'rish uchun qarzdor mijozlar kerak', Colors.grey);
+      _showSnackBar(
+        'Statistika ko\'rish uchun qarzdor mijozlar kerak',
+        Colors.grey,
+      );
       return;
     }
 
     final totalDebt = _getTotalDebt(customers);
-    final maxDebtCustomer = customersWithDebt.reduce((a, b) => a.totalDebt > b.totalDebt ? a : b);
-    final minDebtCustomer = customersWithDebt.reduce((a, b) => a.totalDebt < b.totalDebt ? a : b);
+    final maxDebtCustomer = customersWithDebt.reduce(
+      (a, b) => a.totalDebt > b.totalDebt ? a : b,
+    );
+    final minDebtCustomer = customersWithDebt.reduce(
+      (a, b) => a.totalDebt < b.totalDebt ? a : b,
+    );
     final avgDebt = totalDebt / customersWithDebt.length;
-    final totalOrders = customers.fold(0, (sum, customer) => sum + customer.orders.length);
-    final paidOrders = customers.fold(0, (sum, customer) => sum + customer.orders.where((o) => o.isPaid).length);
+    final totalOrders = customers.fold(
+      0,
+      (sum, customer) => sum + customer.orders.length,
+    );
+    final paidOrders = customers.fold(
+      0,
+      (sum, customer) => sum + customer.orders.where((o) => o.isPaid).length,
+    );
 
     showDialog(
       context: context,
@@ -1136,7 +1177,10 @@ class _DebtsScreenState extends State<DebtsScreen>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildStatRow('Qarzdor mijozlar:', '${customersWithDebt.length} ta'),
+            _buildStatRow(
+              'Qarzdor mijozlar:',
+              '${customersWithDebt.length} ta',
+            ),
             _buildStatRow(
               'Umumiy qarz:',
               '${totalDebt.toStringAsFixed(0)} so\'m',

@@ -577,17 +577,21 @@ class FarmProvider with ChangeNotifier {
       if (customersData.isNotEmpty) {
         print('📥 Loading ${customersData.length} customers from Supabase');
 
-        // Clear and rebuild customers list
-        _farm!.customers.clear();
+        // Create a new list instead of modifying the existing one during iteration
+        final newCustomers = <Customer>[];
 
         for (final customerData in customersData) {
           try {
             final customer = Customer.fromJson(customerData);
-            _farm!.customers.add(customer);
+            newCustomers.add(customer);
           } catch (e) {
             print('⚠️ Customer parsing error: $e');
           }
         }
+
+        // Replace the entire customers list atomically
+        _farm!.customers.clear();
+        _farm!.customers.addAll(newCustomers);
 
         print('✅ Loaded ${_farm!.customers.length} customers successfully');
       }
@@ -1046,9 +1050,66 @@ class FarmProvider with ChangeNotifier {
     String? phone,
     String? address,
   }) async {
-    if (_farm == null) return false;
+    if (_farm == null) {
+      print('❌ addCustomer: Farm null');
+      return false;
+    }
+
     try {
+      print('📝 addCustomer: Boshlandi - $name | $phone | $address');
+
+      // Check for duplicate customers
+      final normalizedPhone = phone?.replaceAll(RegExp(r'\s+'), '') ?? '';
+      final existingCustomer = _farm!.customers
+          .where((c) => !c.name.startsWith('QARZ:'))
+          .where((c) {
+            if (normalizedPhone.isNotEmpty) {
+              final customerPhone = c.phone.replaceAll(RegExp(r'\s+'), '');
+              return customerPhone == normalizedPhone;
+            }
+            return c.name.trim().toLowerCase() == name.trim().toLowerCase();
+          })
+          .firstOrNull;
+
+      if (existingCustomer != null) {
+        print(
+          '🔍 Mijoz allaqachon mavjud: ${existingCustomer.name} (${existingCustomer.id})',
+        );
+        print(
+          '📊 Hozirgi mijozlar soni: ${_farm!.customers.where((c) => !c.name.startsWith('QARZ:')).length}',
+        );
+        // Update existing customer info instead of creating duplicate
+        existingCustomer.name = name.trim();
+        existingCustomer.phone = phone?.trim() ?? '';
+        existingCustomer.address = address?.trim() ?? '';
+        existingCustomer.updatedAt = DateTime.now();
+
+        // Immediate UI update
+        _notifyListenersImmediate();
+
+        await _addActivityLog(
+          'Mijoz yangilandi',
+          'Mijoz ma\'lumotlari yangilandi: $name${phone != null ? ' ($phone)' : ''}${address != null ? ', $address' : ''}',
+        );
+
+        // Use immediate persist for critical customer data
+        await _persistImmediate();
+
+        print(
+          '✅ Mijoz ma\'lumotlari yangilandi. Mijozlar soni: ${_farm!.customers.where((c) => !c.name.startsWith('QARZ:')).length}',
+        );
+        return true;
+      }
+
+      // Add new customer
+      print(
+        '📊 Mijozlar soni qo\'shishdan oldin: ${_farm!.customers.where((c) => !c.name.startsWith('QARZ:')).length}',
+      );
       _farm!.addCustomer(name, phone: phone, address: address);
+      print('✅ addCustomer: Mijoz qo\'shildi');
+      print(
+        '📊 Mijozlar soni qo\'shishdan keyin: ${_farm!.customers.where((c) => !c.name.startsWith('QARZ:')).length}',
+      );
 
       // Immediate UI update
       _notifyListenersImmediate();
@@ -1061,8 +1122,10 @@ class FarmProvider with ChangeNotifier {
       // Use immediate persist for critical customer data
       await _persistImmediate();
 
+      print('✅ addCustomer: Muvaffaqiyatli yakunlandi');
       return true;
     } catch (e) {
+      print('❌ addCustomer: Xatolik - $e');
       _error = 'Mijoz qo\'shishda xatolik: $e';
       await _addActivityLog('Xatolik', 'Mijoz qo\'shishda xatolik: $e');
       notifyListeners();
@@ -1361,7 +1424,13 @@ class FarmProvider with ChangeNotifier {
   // Get only regular customers (not debt-only ones)
   List<Customer> getRegularCustomers() {
     if (_farm == null) return [];
-    return _farm!.customers.where((c) => !c.name.startsWith('QARZ:')).toList();
+    final regularCustomers = _farm!.customers
+        .where((c) => !c.name.startsWith('QARZ:'))
+        .toList();
+    print(
+      '📊 getRegularCustomers(): ${regularCustomers.length} ta regular mijoz',
+    );
+    return regularCustomers;
   }
 
   // Get only debt customers (for Debts screen)
@@ -1406,13 +1475,28 @@ class FarmProvider with ChangeNotifier {
 
       // First, add or find the customer (QARZ: prefixi bilan emas!)
       String? customerId;
+
+      // Normalize phone number for comparison
+      final normalizedInputPhone = customerPhone.replaceAll(RegExp(r'\s+'), '');
+
       final existingCustomer = _farm!.customers
           .where(
-            (c) =>
-                c.phone.replaceAll(RegExp(r'\s+'), '') ==
-                    customerPhone.replaceAll(RegExp(r'\s+'), '') &&
-                !c.name.startsWith('QARZ:'), // Exclude debt-only customers
-          )
+            (c) => !c.name.startsWith('QARZ:'),
+          ) // Exclude debt-only customers
+          .where((c) {
+            final normalizedCustomerPhone = c.phone.replaceAll(
+              RegExp(r'\s+'),
+              '',
+            );
+            // Match by phone if both have phone numbers
+            if (normalizedInputPhone.isNotEmpty &&
+                normalizedCustomerPhone.isNotEmpty) {
+              return normalizedCustomerPhone == normalizedInputPhone;
+            }
+            // If no phone, match by name
+            return c.name.trim().toLowerCase() ==
+                customerName.trim().toLowerCase();
+          })
           .firstOrNull;
 
       if (existingCustomer != null) {
@@ -1427,6 +1511,8 @@ class FarmProvider with ChangeNotifier {
       } else {
         // Add new regular customer (NOT debt-only)
         print('🔶 Yangi mijoz yaratilmoqda: $customerName');
+        print('📞 Input telefon: "$customerPhone"');
+        print('📍 Input manzil: "$customerAddress"');
 
         // IMPORTANT: Call addCustomer method to ensure customer is properly added
         final success = await addCustomer(
@@ -1439,16 +1525,57 @@ class FarmProvider with ChangeNotifier {
           print('❌ Mijoz qo\'shishda xatolik: ${_error}');
           throw Exception('Mijoz qo\'shib bo\'lmadi');
         }
+        print('✅ addCustomer() muvaffaqiyatli bajarildi');
 
-        // Get the newly added customer's ID from the last added customer
-        final newCustomer = _farm!.customers
+        // DEBUG: Log current customers after addition
+        print('🔍 Mijoz qo\'shishdan keyin:');
+        print('🔍 Jami mijozlar: ${_farm!.customers.length}');
+        for (int i = 0; i < _farm!.customers.length; i++) {
+          final c = _farm!.customers[i];
+          print('🔍   [$i] ${c.name} | ${c.phone} | ${c.id}');
+        }
+
+        // Wait a brief moment to ensure the customer is properly added
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Get the newly added customer's ID - use multiple search strategies
+        Customer? newCustomer;
+
+        // Strategy 1: Find by exact name and normalized phone
+        final normalizedInputPhone = customerPhone.replaceAll(
+          RegExp(r'\s+'),
+          '',
+        );
+        newCustomer = _farm!.customers
+            .where((c) => !c.name.startsWith('QARZ:'))
+            .where((c) => c.name.trim() == customerName.trim())
             .where(
               (c) =>
-                  c.name == customerName &&
-                  c.phone == customerPhone &&
-                  !c.name.startsWith('QARZ:'),
+                  c.phone.replaceAll(RegExp(r'\s+'), '') ==
+                  normalizedInputPhone,
             )
-            .lastOrNull;
+            .firstOrNull;
+
+        // Strategy 2: If not found, try just by name (in case phone was empty or different)
+        if (newCustomer == null && customerName.trim().isNotEmpty) {
+          newCustomer = _farm!.customers
+              .where((c) => !c.name.startsWith('QARZ:'))
+              .where((c) => c.name.trim() == customerName.trim())
+              .lastOrNull; // Get the latest one with this name
+        }
+
+        // Strategy 3: Get the most recently added customer if others fail
+        if (newCustomer == null) {
+          final regularCustomers = _farm!.customers
+              .where((c) => !c.name.startsWith('QARZ:'))
+              .toList();
+          if (regularCustomers.isNotEmpty) {
+            newCustomer = regularCustomers.last;
+            print(
+              '⚠️ Using last added customer as fallback: ${newCustomer.name}',
+            );
+          }
+        }
 
         if (newCustomer != null) {
           customerId = newCustomer.id;
@@ -1457,6 +1584,10 @@ class FarmProvider with ChangeNotifier {
           );
         } else {
           print('❌ Yangi mijoz topilmadi!');
+          print('🔍 Jami mijozlar: ${_farm!.customers.length}');
+          print(
+            '🔍 Regular mijozlar: ${_farm!.customers.where((c) => !c.name.startsWith("QARZ:")).length}',
+          );
           throw Exception('Mijoz yaratilgandan keyin topilmadi');
         }
       }
@@ -1677,7 +1808,10 @@ class FarmProvider with ChangeNotifier {
             '💾 Saving ${_farm!.customers.length} customers to Supabase...',
           );
 
-          for (final customer in _farm!.customers) {
+          // Create a copy of the customers list to avoid concurrent modification
+          final customersCopy = List<Customer>.from(_farm!.customers);
+
+          for (final customer in customersCopy) {
             try {
               final customerData = {
                 'id': customer.id,
@@ -1695,7 +1829,9 @@ class FarmProvider with ChangeNotifier {
 
               // Orders ni saqlash
               if (customer.orders.isNotEmpty) {
-                for (final order in customer.orders) {
+                // Also copy orders list to avoid concurrent modification
+                final ordersCopy = List.from(customer.orders);
+                for (final order in ordersCopy) {
                   try {
                     // Safe null check for dates
                     final deliveryDate = order.deliveryDate ?? DateTime.now();

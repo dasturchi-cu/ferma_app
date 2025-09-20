@@ -158,15 +158,20 @@ class Farm {
   void addCustomer(String name, {String? phone, String? address}) {
     // Generate a proper UUID
     final customerId = UuidGenerator.generateUuid();
-    
+
     final customer = Customer(
       id: customerId,
-      name: name,
-      phone: phone ?? '',
-      address: address ?? '',
+      name: name.trim(), // Trim whitespace
+      phone: phone?.trim() ?? '', // Trim whitespace and handle null
+      address: address?.trim() ?? '', // Trim whitespace and handle null
     );
     customers.add(customer);
     updatedAt = DateTime.now();
+
+    // Debug log
+    print(
+      '📝 Farm.addCustomer(): Qo\'shildi - ${customer.name} | ${customer.phone} | ${customer.id}',
+    );
   }
 
   void removeCustomer(String customerId) {
@@ -193,26 +198,29 @@ class Farm {
     if (trayCount <= 0 || pricePerTray < 0) {
       return false;
     }
-    
+
     // Find the customer first
     final customer = findCustomer(customerId);
     if (customer == null) {
       return false;
     }
-    
+
     // Check available stock if egg data exists
     if (egg != null) {
       final availableStock = egg!.currentStock;
       if (trayCount > availableStock) {
         return false; // Not enough stock
       }
-      
+
       // Deduct from stock
-      if (!egg!.deductFromStock(trayCount, note: 'Customer order for ${customer.name}')) {
+      if (!egg!.deductFromStock(
+        trayCount,
+        note: 'Customer order for ${customer.name}',
+      )) {
         return false; // Failed to deduct from stock
       }
     }
-    
+
     try {
       // Add the order to customer
       customer.addOrder(trayCount, pricePerTray, deliveryDate, note: note);

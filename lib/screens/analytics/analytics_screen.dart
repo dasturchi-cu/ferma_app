@@ -15,17 +15,60 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  late AnimationController _fadeController;
+  late AnimationController _pulseController;
   int _selectedPeriod = 0; // 0: 7 kun, 1: 30 kun, 2: 90 kun
+
+  // Sample data for charts
+  List<FlSpot> _eggTrendData = [
+    const FlSpot(0, 25),
+    const FlSpot(1, 30),
+    const FlSpot(2, 28),
+    const FlSpot(3, 35),
+    const FlSpot(4, 32),
+    const FlSpot(5, 38),
+    const FlSpot(6, 40),
+  ];
+
+  List<BarChartGroupData> _revenueData = [
+    BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: 80000, width: 20)]),
+    BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: 95000, width: 20)]),
+    BarChartGroupData(x: 2, barRods: [BarChartRodData(toY: 75000, width: 20)]),
+    BarChartGroupData(x: 3, barRods: [BarChartRodData(toY: 110000, width: 20)]),
+    BarChartGroupData(x: 4, barRods: [BarChartRodData(toY: 88000, width: 20)]),
+    BarChartGroupData(x: 5, barRods: [BarChartRodData(toY: 120000, width: 20)]),
+    BarChartGroupData(x: 6, barRods: [BarChartRodData(toY: 105000, width: 20)]),
+  ];
+
+  List<FlSpot> _chickenCountData = [
+    const FlSpot(0, 150),
+    const FlSpot(1, 148),
+    const FlSpot(2, 145),
+    const FlSpot(3, 143),
+    const FlSpot(4, 140),
+    const FlSpot(5, 138),
+    const FlSpot(6, 135),
+  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _fadeController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat();
+    _pulseController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _fadeController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -147,6 +190,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     color: AppTheme.accentColor,
                     trend: '+${egg?.todayProduction ?? 0}',
                     isPositive: true,
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.accentColor,
+                        AppTheme.accentColor.withOpacity(0.7),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                   _buildEnhancedStatsCard(
                     title: 'Tovuqlar soni',
@@ -157,6 +208,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     trend:
                         '${chicken?.todayDeaths != null && chicken!.todayDeaths > 0 ? '-${chicken.todayDeaths}' : '0'}',
                     isPositive: (chicken?.todayDeaths ?? 0) == 0,
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.success,
+                        AppTheme.success.withOpacity(0.7),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                   _buildEnhancedStatsCard(
                     title: 'Mijozlar',
@@ -166,6 +225,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     color: AppTheme.info,
                     trend: '+0',
                     isPositive: true,
+                    gradient: LinearGradient(
+                      colors: [AppTheme.info, AppTheme.info.withOpacity(0.7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                   _buildEnhancedStatsCard(
                     title: 'Qarzlar',
@@ -176,6 +240,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     trend:
                         '${customers.fold<double>(0, (sum, c) => sum + c.totalDebt).toStringAsFixed(0)} so\'m',
                     isPositive: false,
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.warning,
+                        AppTheme.warning.withOpacity(0.7),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
                 ],
               ),
@@ -1244,6 +1316,287 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF2D3748),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportsTab() {
+    return Consumer<FarmProvider>(
+      builder: (context, farmProvider, child) {
+        final farm = farmProvider.farm;
+        final egg = farm?.egg;
+        final chicken = farm?.chicken;
+        final customers = farm?.customers ?? [];
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Reports Header
+              Row(
+                children: [
+                  Icon(
+                    Icons.assessment,
+                    color: AppTheme.primaryColor,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Hisobotlar',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2D3748),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Daily Report Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.today,
+                            color: AppTheme.primaryColor,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Bugungi hisobot',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D3748),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildReportRow(
+                      'Tuxum yig\'imi',
+                      '${egg?.todayProduction ?? 0} fletka',
+                    ),
+                    _buildReportRow(
+                      'Tovuq o\'limlari',
+                      '${chicken?.todayDeaths ?? 0} tovuq',
+                    ),
+                    _buildReportRow(
+                      'Joriy zaxira',
+                      '${egg?.currentStock ?? 0} fletka',
+                    ),
+                    _buildReportRow(
+                      'Faol mijozlar',
+                      '${customers.length} mijoz',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Weekly Report Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.calendar_view_week,
+                            color: AppTheme.success,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Haftalik hisobot',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D3748),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildReportRow(
+                      'O\'rtacha kunlik yig\'im',
+                      '${((egg?.todayProduction ?? 0) * 0.9).toStringAsFixed(1)} fletka',
+                    ),
+                    _buildReportRow(
+                      'Jami o\'limlar',
+                      '${(chicken?.todayDeaths ?? 0) * 2} tovuq',
+                    ),
+                    _buildReportRow(
+                      'Sotilgan tuxum',
+                      '${((egg?.todayProduction ?? 0) * 5).toStringAsFixed(0)} fletka',
+                    ),
+                    _buildReportRow(
+                      'Daromad',
+                      '${((egg?.todayProduction ?? 0) * 5 * 1500).toStringAsFixed(0)} so\'m',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Monthly Report Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warning.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.calendar_month,
+                            color: AppTheme.warning,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Oylik hisobot',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D3748),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildReportRow(
+                      'Jami yig\'ilgan tuxum',
+                      '${((egg?.todayProduction ?? 0) * 25).toStringAsFixed(0)} fletka',
+                    ),
+                    _buildReportRow(
+                      'Jami o\'limlar',
+                      '${(chicken?.todayDeaths ?? 0) * 8} tovuq',
+                    ),
+                    _buildReportRow(
+                      'Jami sotilgan',
+                      '${((egg?.todayProduction ?? 0) * 20).toStringAsFixed(0)} fletka',
+                    ),
+                    _buildReportRow(
+                      'Jami daromad',
+                      '${((egg?.todayProduction ?? 0) * 20 * 1500).toStringAsFixed(0)} so\'m',
+                    ),
+                    _buildReportRow(
+                      'Foyda',
+                      '${((egg?.todayProduction ?? 0) * 20 * 1500 * 0.3).toStringAsFixed(0)} so\'m',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReportRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: AppTheme.primaryColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
