@@ -4,6 +4,7 @@ import '../../providers/farm_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/stat_card.dart';
+ 
 
 class ChickensScreen extends StatefulWidget {
   const ChickensScreen({super.key});
@@ -456,6 +457,7 @@ class _ChickensScreenState extends State<ChickensScreen>
             ),
 
             const SizedBox(height: 20),
+            // Search/filter removed per requirements
 
             // Death history
             if (chicken.deaths.isNotEmpty) ...[

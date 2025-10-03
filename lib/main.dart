@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:ferma_app/screens/eggs/eggs_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -9,22 +8,15 @@ import 'package:flutter/foundation.dart' show kDebugMode, BindingBase;
 import 'config/supabase_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/farm_provider.dart';
-import 'screens/splash_screen.dart';
+import 'providers/theme_provider.dart';
+import 'providers/search_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/main/main_screen.dart';
 import 'screens/customers/customers_screen.dart';
 import 'screens/chickens/chickens_screen.dart';
-import 'screens/error/error_screen.dart';
-import 'utils/app_theme.dart';
-import 'utils/modern_theme.dart';
 import 'services/notification_service.dart';
 import 'services/activity_log_service.dart';
 import 'services/inventory_service.dart';
-import 'models/farm.dart';
-import 'models/chicken.dart';
-import 'models/egg.dart';
-import 'models/activity_log.dart';
-import 'models/inventory.dart';
 
 // Xavfsiz Hive Boxlarini Boshqarish
 Future<void> _openHiveBoxSafely<T>(String boxName, T defaultValue) async {
@@ -47,31 +39,6 @@ Future<void> _openHiveBoxSafely<T>(String boxName, T defaultValue) async {
       // Bu boxsiz davom etish
     }
   }
-}
-
-// Eski Hive boxlarni to'g'ri tozalash
-Future<void> _cleanupOldHiveBoxes() async {
-  final boxesToCleanup = ['farms', 'activity_logs', 'farm_backup', 'inventory_items', 'inventory_transactions'];
-
-  for (final boxName in boxesToCleanup) {
-    try {
-      // Birinchi, boxni yopish
-      if (Hive.isBoxOpen(boxName)) {
-        await Hive.box(boxName).close();
-        print('🗋 Box yopildi: $boxName');
-      }
-
-      // Keyin, boxni diskdan o'chirish
-      await Hive.deleteBoxFromDisk(boxName);
-      print('🧹 Box diskdan tozalandi: $boxName');
-
-    } catch (e) {
-      print('⚠️ Box tozalashda xatolik ($boxName): $e');
-      // Boshqa boxlar bilan davom etish
-    }
-  }
-
-  print('✅ Barcha eski boxlar tozalandi');
 }
 
 Future<void> initializeApp() async {
@@ -99,8 +66,9 @@ Future<void> initializeApp() async {
   // Hive va Supabase'ni ishga tushirish
   await Hive.initFlutter();
 
-  // Eski boxlarni tozalash
-  await _cleanupOldHiveBoxes();
+  // Eski boxlarni tozalashni o‘chirildi: foydalanuvchi ma’lumotlari saqlanib qolishi kerak
+  // Agar bir kun majburiy migratsiya kerak bo‘lsa, faqat vaqtinchalik flag orqali ishga tushiring.
+  // await _cleanupOldHiveBoxes();
 
   // Yangi boxlarni xavfsiz ochish
   await _openHiveBoxSafely<Map>('farms', <String, dynamic>{});
@@ -123,13 +91,16 @@ void main() {
     BindingBase.debugZoneErrorsAreFatal = false;
   }
 
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    await initializeApp();
-    runApp(const FermaApp());
-  }, (error, stackTrace) {
-    debugPrint('Uncaught error: $error\n$stackTrace');
-  });
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      await initializeApp();
+      runApp(const FermaApp());
+    },
+    (error, stackTrace) {
+      debugPrint('Uncaught error: $error\n$stackTrace');
+    },
+  );
 }
 
 class FermaApp extends StatefulWidget {
@@ -164,6 +135,8 @@ class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<AuthProvider, FarmProvider>(
           create: (context) => FarmProvider(),
@@ -180,12 +153,14 @@ class _FermaAppState extends State<FermaApp> with WidgetsBindingObserver {
           },
         ),
       ],
-      child: Consumer<AuthProvider>(
-        builder: (context, authProvider, _) {
+      child: Consumer2<ThemeProvider, AuthProvider>(
+        builder: (context, themeProvider, authProvider, _) {
           return MaterialApp(
             title: 'Ferma App',
             debugShowCheckedModeBanner: false,
-            theme: ModernTheme.lightTheme,
+            theme: themeProvider.lightTheme,
+            darkTheme: themeProvider.darkTheme,
+            themeMode: themeProvider.themeMode,
             home: (authProvider.isAuthenticated || authProvider.farm != null)
                 ? const MainScreen()
                 : const LoginScreen(),

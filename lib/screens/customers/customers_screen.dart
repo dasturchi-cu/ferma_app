@@ -4,6 +4,8 @@ import '../../providers/farm_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/app_theme.dart';
 import '../../models/customer.dart';
+import '../../widgets/search_bar_with_filters.dart';
+import '../../providers/search_provider.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -14,13 +16,58 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   @override
+  void dispose() {
+    super.dispose();
+  }
+
+  List<Customer> _filterCustomers(List<Customer> customers, SearchProvider sp) {
+    return customers.where((customer) {
+      final q = sp.query.trim().toLowerCase();
+      if (q.isNotEmpty) {
+        final matched =
+            customer.name.toLowerCase().contains(q) ||
+            customer.phone.toLowerCase().contains(q) ||
+            customer.address.toLowerCase().contains(q);
+        if (!matched) return false;
+      }
+      // amount range check using totalDebt
+      final debt = customer.totalDebt;
+      if (sp.minAmount != null && debt < sp.minAmount!) return false;
+      if (sp.maxAmount != null && debt > sp.maxAmount!) return false;
+      // date filter: has any order within range
+      if (sp.fromDate != null || sp.toDate != null) {
+        final from = sp.fromDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final to = sp.toDate ?? DateTime(2100);
+        final inRange = customer.orders.any(
+          (o) =>
+              o.deliveryDate.isAfter(from.subtract(const Duration(days: 1))) &&
+              o.deliveryDate.isBefore(to.add(const Duration(days: 1))),
+        );
+        if (!inRange) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mijozlar'),
-        backgroundColor: AppConstants.accentColor,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppTheme.primaryColor,
+                AppTheme.primaryColor.withOpacity(0.85),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           Consumer<FarmProvider>(
             builder: (context, farmProvider, child) {
@@ -42,11 +89,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
         ],
       ),
-      body: Consumer<FarmProvider>(
-        builder: (context, farmProvider, child) {
-          final farm = farmProvider.farm;
-          final customers = farmProvider
+      body: Consumer2<FarmProvider, SearchProvider>(
+        builder: (context, farmProvider, sp, child) {
+          final allCustomers = farmProvider
               .getRegularCustomers(); // Only regular customers
+          final customers = _filterCustomers(allCustomers, sp);
 
           return Column(
             children: [
@@ -128,7 +175,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             Expanded(
                               child: _buildModernStatCard(
                                 'Mijozlar soni',
-                                '${customers.length}',
+                                '${allCustomers.length}',
                                 'ta',
                                 Icons.person_outline_rounded,
                                 Colors.white,
@@ -138,10 +185,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             Expanded(
                               child: _buildModernStatCard(
                                 'Umumiy qarz',
-                                '${customers.fold<double>(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)}',
+                                '${allCustomers.fold<double>(0.0, (sum, customer) => sum + customer.totalDebt).toStringAsFixed(0)}',
                                 "so'm",
                                 Icons.account_balance_wallet_outlined,
-                                customers.any((c) => c.totalDebt > 0)
+                                allCustomers.any((c) => c.totalDebt > 0)
                                     ? Colors.orange[300]!
                                     : Colors.green[300]!,
                               ),
@@ -153,6 +200,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   ),
                 ),
               ),
+
+              // Search Bar with filters (debounced)
+              if (allCustomers.isNotEmpty)
+                const SearchBarWithFilters(
+                  hintText: 'Mijozlarni qidirish (ism, telefon, manzil)',
+                  showAmount: true,
+                  showStatus: true,
+                ),
 
               // Content
               Expanded(
@@ -258,12 +313,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -271,6 +331,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
                   unit,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.8),
                     fontSize: 12,
@@ -289,10 +351,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final hasDebt = customer.totalDebt > 0;
     final upcomingOrders = customer.tomorrowOrders;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(AppConstants.mediumRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+          // Soft glow effect
+          BoxShadow(
+            color: AppConstants.accentColor.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppConstants.mediumPadding),
@@ -712,7 +788,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('$customerName mijoz qo\'shildi'),
+                        content: Text(
+                          '$customerName mijoz muvaffaqiyatli qo\'shildi',
+                        ),
                         backgroundColor: AppConstants.successColor,
                       ),
                     );
@@ -841,6 +919,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
+  // Legacy dialog kept earlier; no longer referenced (kept for possible reuse)
+  /*
   void _showAddOrderDialog(BuildContext context, Customer customer) {
     final trayController = TextEditingController();
     final priceController = TextEditingController(
@@ -997,6 +1077,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ),
     );
   }
+  */
 
   void _showCustomerOrdersDialog(BuildContext context, Customer customer) {
     showDialog(
@@ -1566,9 +1647,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   price,
                 );
 
-                Navigator.pop(context);
-
                 if (context.mounted) {
+                  Navigator.pop(context);
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -1578,6 +1658,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         backgroundColor: AppConstants.successColor,
                       ),
                     );
+                    // Force refresh so "Buyurtmalar tarixi" shows latest orders immediately
+                    try {
+                      await farmProvider.refreshData();
+                    } catch (_) {}
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -1602,6 +1686,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _showDeleteCustomerDialog(BuildContext context, Customer customer) {
+    // Keep a reference to the parent context for SnackBar
+    final parentContext = context;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1617,22 +1704,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ElevatedButton(
             onPressed: () async {
               final farmProvider = Provider.of<FarmProvider>(
-                context,
+                parentContext,
                 listen: false,
               );
               final success = await farmProvider.removeCustomer(customer.id);
 
-              Navigator.pop(context);
+              if (Navigator.canPop(parentContext)) {
+                Navigator.of(parentContext).pop();
+              }
 
               if (success) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(parentContext).showSnackBar(
                   const SnackBar(
                     content: Text('Mijoz o\'chirildi'),
                     backgroundColor: AppConstants.warningColor,
                   ),
                 );
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(parentContext).showSnackBar(
                   SnackBar(
                     content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
                     backgroundColor: AppConstants.errorColor,

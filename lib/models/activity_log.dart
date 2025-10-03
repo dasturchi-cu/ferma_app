@@ -41,8 +41,42 @@ class ActivityLog {
     this.importance = ActivityImportance.normal,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  factory ActivityLog.fromJson(Map<String, dynamic> json) =>
-      _$ActivityLogFromJson(json);
+  factory ActivityLog.fromJson(Map<String, dynamic> json) {
+    final fixed = Map<String, dynamic>.from(json);
+
+    // Normalize keys from snake_case to camelCase
+    if (fixed.containsKey('farm_id')) fixed['farmId'] = fixed['farm_id'];
+    if (fixed.containsKey('created_at'))
+      fixed['createdAt'] = fixed['created_at'];
+
+    // Normalize legacy/alternate type values
+    final dynamic rawType = fixed['type'];
+    if (rawType is String) {
+      switch (rawType) {
+        case 'egg_sale':
+        case 'egg sale':
+          fixed['type'] = 'eggSale';
+          break;
+        case 'customer':
+          fixed['type'] = 'customerAdded';
+          break;
+        case 'payment':
+          fixed['type'] = 'debtPaid';
+          break;
+        default:
+          // keep existing values
+          break;
+      }
+    }
+
+    // Ensure metadata shape is Map<String, dynamic>
+    if (fixed['metadata'] is Map &&
+        fixed['metadata'] is! Map<String, dynamic>) {
+      fixed['metadata'] = Map<String, dynamic>.from(fixed['metadata'] as Map);
+    }
+
+    return _$ActivityLogFromJson(fixed);
+  }
 
   Map<String, dynamic> toJson() => _$ActivityLogToJson(this);
 
@@ -110,7 +144,8 @@ class ActivityLog {
       farmId: farmId,
       type: ActivityType.debtAdded,
       title: 'Qarz qo\'shildi',
-      description: '$customerName ga ${amount.toStringAsFixed(0)} so\'m qarz qo\'shildi',
+      description:
+          '$customerName ga ${amount.toStringAsFixed(0)} so\'m qarz qo\'shildi',
       metadata: {'customerName': customerName, 'amount': amount},
       importance: ActivityImportance.high,
     );
@@ -141,7 +176,8 @@ class ActivityLog {
       farmId: farmId,
       type: ActivityType.chickenDeath,
       title: 'Tovuq o\'limi',
-      description: '$count ta tovuq o\'ldi${reason != null ? ' ($reason)' : ''}',
+      description:
+          '$count ta tovuq o\'ldi${reason != null ? ' ($reason)' : ''}',
       metadata: {'count': count, 'reason': reason},
       importance: ActivityImportance.high,
     );
@@ -169,31 +205,31 @@ class ActivityLog {
 enum ActivityType {
   @HiveField(0)
   eggProduction,
-  
+
   @HiveField(1)
   eggSale,
-  
+
   @HiveField(2)
   customerAdded,
-  
+
   @HiveField(3)
   debtAdded,
-  
+
   @HiveField(4)
   debtPaid,
-  
+
   @HiveField(5)
   chickenAdded,
-  
+
   @HiveField(6)
   chickenDeath,
-  
+
   @HiveField(7)
   brokenEggs,
-  
+
   @HiveField(8)
   largeEggs,
-  
+
   @HiveField(9)
   other,
 }
@@ -202,13 +238,13 @@ enum ActivityType {
 enum ActivityImportance {
   @HiveField(0)
   low,
-  
+
   @HiveField(1)
   normal,
-  
+
   @HiveField(2)
   high,
-  
+
   @HiveField(3)
   critical,
 }

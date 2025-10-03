@@ -4,16 +4,18 @@ class AppConstants {
   static const String appName = 'Ferma App';
   static const String appVersion = '1.0.0';
 
-  // Colors
-  static const Color primaryColor = Color(0xFF4CAF50);
-  static const Color secondaryColor = Color(0xFFFF9800);
-  static const Color accentColor = Color(0xFF9C27B0);
-  static const Color backgroundColor = Color(0xFFF5F5F5);
+  // Colors - Ko'k rang asosida
+  static const Color primaryColor = Color(0xFF1976D2); // Ko'k asosiy rang
+  static const Color primaryLightColor = Color(0xFF42A5F5); // Och ko'k
+  static const Color primaryDarkColor = Color(0xFF0D47A1); // Qorong'i ko'k
+  static const Color secondaryColor = Color(0xFF03DAC6); // Turquoise
+  static const Color accentColor = Color(0xFF64B5F6); // Och ko'k accent
+  static const Color backgroundColor = Color(0xFFF8FAFF); // Och ko'k fon
   static const Color surfaceColor = Color(0xFFFFFFFF);
-  static const Color errorColor = Color(0xFFF44336);
-  static const Color warningColor = Color(0xFFFF9800);
-  static const Color successColor = Color(0xFF4CAF50);
-  static const Color infoColor = Color(0xFF2196F3);
+  static const Color errorColor = Color(0xFFE57373);
+  static const Color warningColor = Color(0xFFFFB74D);
+  static const Color successColor = Color(0xFF81C784);
+  static const Color infoColor = Color(0xFF42A5F5);
   static const Color textPrimaryColor = Color(0xFF212121);
   static const Color textSecondaryColor = Color(0xFF757575);
 

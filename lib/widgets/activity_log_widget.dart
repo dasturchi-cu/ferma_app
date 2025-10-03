@@ -10,6 +10,7 @@ class ActivityLogWidget extends StatefulWidget {
   final int maxItems;
   final bool showTitle;
   final double height;
+  final String? query; // optional simple search query
 
   const ActivityLogWidget({
     super.key,
@@ -17,6 +18,7 @@ class ActivityLogWidget extends StatefulWidget {
     this.maxItems = 10,
     this.showTitle = true,
     this.height = 300,
+    this.query,
   });
 
   @override
@@ -193,12 +195,22 @@ class _ActivityLogWidgetState extends State<ActivityLogWidget> {
   }
 
   Widget _buildActivityList() {
+    // If no query passed (or query empty), show all
+    final q = (widget.query ?? '').trim().toLowerCase();
+    final items = q.isEmpty
+        ? _activities
+        : _activities.where((a) {
+            final t = a.title.toLowerCase();
+            final d = a.description.toLowerCase();
+            return t.contains(q) || d.contains(q);
+          }).toList();
+
     return ListView.separated(
       padding: const EdgeInsets.all(8),
-      itemCount: _activities.length,
+      itemCount: items.length,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final activity = _activities[index];
+        final activity = items[index];
         return _buildActivityItem(activity);
       },
     );

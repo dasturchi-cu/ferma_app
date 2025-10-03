@@ -3,10 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 class ModernTheme {
   // === COLOR PALETTE ===
-  // Primary Colors - Nature inspired greens
-  static const Color primaryGreen = Color(0xFF2E7D32);
-  static const Color lightGreen = Color(0xFF66BB6A);
-  static const Color darkGreen = Color(0xFF1B5E20);
+  // Primary Colors - Professional Blue Palette (keep names for compatibility)
+  // Using blue hues while retaining existing constant names to avoid refactors
+  static const Color primaryGreen = Color(0xFF1E88E5); // Primary Blue
+  static const Color lightGreen = Color(0xFF64B5F6);   // Light Blue
+  static const Color darkGreen = Color(0xFF1565C0);    // Dark Blue
   
   // Background Colors - Clean and minimal
   static const Color backgroundColor = Color(0xFFF8FFFE);
@@ -19,10 +20,10 @@ class ModernTheme {
   static const Color darkGray = Color(0xFF9AA0A6);
   static const Color textGray = Color(0xFF5F6368);
   
-  // Accent Colors
-  static const Color accentYellow = Color(0xFFFFC107);
-  static const Color accentOrange = Color(0xFFFF9800);
-  static const Color accentBlue = Color(0xFF2196F3);
+  // Accent Colors (cool accents around blue)
+  static const Color accentYellow = Color(0xFFFFC107); // for highlights
+  static const Color accentOrange = Color(0xFFFFA726); // warmer accent
+  static const Color accentBlue = Color(0xFF00B0FF);   // Neon/Cyan Blue accent
   
   // Status Colors
   static const Color successColor = Color(0xFF4CAF50);
@@ -36,13 +37,41 @@ class ModernTheme {
   static const Color textTertiary = Color(0xFF9CA3AF);
   static const Color textOnPrimary = Color(0xFFFFFFFF);
 
-  // === SHADOWS ===
+  // === SHADOWS & GLOWS ===
   static List<BoxShadow> get softShadow => [
     BoxShadow(
       color: Colors.black.withOpacity(0.04),
       blurRadius: 8,
       offset: const Offset(0, 2),
       spreadRadius: 0,
+    ),
+  ];
+  
+  // Soft glow effects for eye-friendly UI
+  static List<BoxShadow> get softGlow => [
+    BoxShadow(
+      color: primaryGreen.withOpacity(0.1),
+      blurRadius: 12,
+      offset: const Offset(0, 4),
+      spreadRadius: 2,
+    ),
+  ];
+  
+  static List<BoxShadow> get accentGlow => [
+    BoxShadow(
+      color: accentBlue.withOpacity(0.08),
+      blurRadius: 16,
+      offset: const Offset(0, 6),
+      spreadRadius: 1,
+    ),
+  ];
+  
+  static List<BoxShadow> get successGlow => [
+    BoxShadow(
+      color: successColor.withOpacity(0.12),
+      blurRadius: 20,
+      offset: const Offset(0, 8),
+      spreadRadius: 1,
     ),
   ];
 
@@ -170,9 +199,9 @@ class ModernTheme {
     colorScheme: const ColorScheme.light(
       primary: primaryGreen,
       primaryContainer: lightGreen,
-      secondary: accentYellow,
-      secondaryContainer: accentOrange,
-      tertiary: accentBlue,
+      secondary: accentBlue,
+      secondaryContainer: accentYellow,
+      tertiary: accentOrange,
       surface: surfaceColor,
       surfaceContainerHighest: cardColor,
       background: backgroundColor,
@@ -440,7 +469,7 @@ class ModernTheme {
   // Gradient Decorations
   static BoxDecoration get primaryGradientDecoration => BoxDecoration(
     gradient: LinearGradient(
-      colors: [primaryGreen, lightGreen],
+      colors: [darkGreen, primaryGreen, lightGreen],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../utils/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../utils/constants.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -9,469 +11,351 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _darkMode = false;
-  bool _notifications = true;
-  bool _biometricAuth = false;
-  bool _autoBackup = true;
-  String _reminderTime = '08:00';
-  String _currency = 'UZS';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    // Load settings from SharedPreferences or Hive
-    setState(() {
-      // Mock data for now
-      _darkMode = false;
-      _notifications = true;
-      _biometricAuth = false;
-      _autoBackup = true;
-      _reminderTime = '08:00';
-      _currency = 'UZS';
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sozlamalar'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionTitle('Umumiy'),
-            _buildGeneralSettings(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return Scaffold(
+          backgroundColor: themeProvider.backgroundColor,
+          appBar: AppBar(
+            title: const Text(
+              'Sozlamalar',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+            backgroundColor: themeProvider.primaryColor,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shadowColor: themeProvider.primaryColor.withOpacity(0.3),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppConstants.largePadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Tema sozlashi
+                _buildSectionTitle('Tema Sozlamalari'),
+                _buildThemeSettings(themeProvider),
 
-            const SizedBox(height: 24),
+                const SizedBox(height: AppConstants.largePadding),
 
-            _buildSectionTitle('Xavfsizlik'),
-            _buildSecuritySettings(),
-
-            const SizedBox(height: 24),
-
-            _buildSectionTitle('Bildirishnomalar'),
-            _buildNotificationSettings(),
-
-            const SizedBox(height: 24),
-
-            _buildSectionTitle('Ma\'lumotlar'),
-            _buildDataSettings(),
-
-            const SizedBox(height: 24),
-
-            _buildSectionTitle('Haqida'),
-            _buildAboutSection(),
-          ],
-        ),
-      ),
+                // Ilova haqida
+                _buildSectionTitle('Ilova Haqida'),
+                _buildAboutSection(themeProvider),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: AppTheme.primaryColor,
-        ),
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16, left: 8),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: themeProvider.textColor,
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildGeneralSettings() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.dark_mode, color: AppTheme.primaryColor),
-            title: const Text('Tungi rejim'),
-            subtitle: const Text('Ilovani qorong\'i temada ishlatish'),
-            trailing: Switch(
-              value: _darkMode,
-              onChanged: (value) {
-                setState(() {
-                  _darkMode = value;
-                });
-                // TODO: Implement theme switching
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.language, color: AppTheme.primaryColor),
-            title: const Text('Til'),
-            subtitle: const Text('O\'zbekcha'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              // TODO: Implement language selection
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.attach_money,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Valyuta'),
-            subtitle: Text(_currency),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showCurrencyDialog();
-            },
+  Widget _buildThemeSettings(ThemeProvider themeProvider) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.largePadding),
+      decoration: BoxDecoration(
+        color: themeProvider.surfaceColor,
+        borderRadius: BorderRadius.circular(AppConstants.largeRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSecuritySettings() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          ListTile(
-            leading: const Icon(
-              Icons.fingerprint,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Biometrik autentifikatsiya'),
-            subtitle: const Text('Barmoq izi yoki Face ID bilan kirish'),
-            trailing: Switch(
-              value: _biometricAuth,
-              onChanged: (value) async {
-                setState(() {
-                  _biometricAuth = value;
-                });
-                // TODO: Implement biometric auth
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.lock, color: AppTheme.primaryColor),
-            title: const Text('PIN kod'),
-            subtitle: const Text('4 xonali PIN kod o\'rnatish'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showPinCodeDialog();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotificationSettings() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: const Icon(
-              Icons.notifications,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Bildirishnomalar'),
-            subtitle: const Text('Barcha bildirishnomalarni yoqish/o\'chirish'),
-            trailing: Switch(
-              value: _notifications,
-              onChanged: (value) {
-                setState(() {
-                  _notifications = value;
-                });
-                // TODO: Implement notification toggle
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.access_time,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Eslatma vaqti'),
-            subtitle: Text('Har kuni $_reminderTime'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showTimePickerDialog();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDataSettings() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.backup, color: AppTheme.primaryColor),
-            title: const Text('Avtomatik backup'),
-            subtitle: const Text('Har kuni Google Drive ga backup'),
-            trailing: Switch(
-              value: _autoBackup,
-              onChanged: (value) {
-                setState(() {
-                  _autoBackup = value;
-                });
-                // TODO: Implement auto backup
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.cloud_upload,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Qo\'lda backup'),
-            subtitle: const Text('Hozir Google Drive ga yuklash'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showSnackBar('Backup funksiyasi keyincha qo\'shiladi');
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.cloud_download,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Backup dan tiklash'),
-            subtitle: const Text('Google Drive dan ma\'lumotlarni tiklash'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showSnackBar('Tiklash funksiyasi keyincha qo\'shiladi');
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.file_download,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Ma\'lumotlarni eksport qilish'),
-            subtitle: const Text('Excel, PDF yoki CSV formatda'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showExportDialog();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAboutSection() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.info, color: AppTheme.primaryColor),
-            title: const Text('Ilova haqida'),
-            subtitle: const Text('Versiya 1.0.0'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              _showAboutDialog();
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.help, color: AppTheme.primaryColor),
-            title: const Text('Yordam'),
-            subtitle: const Text('Foydalanish bo\'yicha ko\'rsatmalar'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              // TODO: Show help screen
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.feedback, color: AppTheme.primaryColor),
-            title: const Text('Fikr bildirish'),
-            subtitle: const Text('Ilova haqida fikr yoki taklif'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              // TODO: Open feedback form
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCurrencyDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Valyuta tanlang'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('O\'zbek so\'mi (UZS)'),
-              trailing: _currency == 'UZS'
-                  ? const Icon(Icons.check, color: AppTheme.primaryColor)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _currency = 'UZS';
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('AQSH dollari (USD)'),
-              trailing: _currency == 'USD'
-                  ? const Icon(Icons.check, color: AppTheme.primaryColor)
-                  : null,
-              onTap: () {
-                setState(() {
-                  _currency = 'USD';
-                });
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTimePickerDialog() async {
-    final TimeOfDay? time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        DateTime.parse('2024-01-01 $_reminderTime:00'),
-      ),
-    );
-
-    if (time != null) {
-      setState(() {
-        _reminderTime =
-            '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-      });
-    }
-  }
-
-  void _showPinCodeDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('PIN kod o\'rnatish'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('4 xonali PIN kod kiriting:'),
-            const SizedBox(height: 16),
-            TextField(
-              keyboardType: TextInputType.number,
-              maxLength: 4,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'PIN kod',
+          // Tema holati
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: themeProvider.primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: themeProvider.primaryColor.withOpacity(0.3),
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Bekor qilish'),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      themeProvider.isDarkMode
+                          ? '🌙 Tungi rejim'
+                          : '☀️ Kunduzgi rejim',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: themeProvider.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      themeProvider.isDarkMode
+                          ? 'Qorong\'i tema faollashtirilgan'
+                          : 'Yorug\' tema faollashtirilgan',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: themeProvider.secondaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: themeProvider.primaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    themeProvider.isDarkMode
+                        ? Icons.dark_mode
+                        : Icons.light_mode,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
           ),
-          ElevatedButton(
-            onPressed: () {
-              // TODO: Implement PIN code setting
-              Navigator.pop(context);
+
+          const SizedBox(height: 20),
+
+          // Tema toggle
+          _buildSettingItem(
+            icon: themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+            title: 'Tema rejimi',
+            subtitle: themeProvider.isDarkMode
+                ? 'Tungi rejim faollashtirilgan'
+                : 'Kunduzgi rejim faollashtirilgan',
+            trailing: Switch(
+              value: themeProvider.isDarkMode,
+              onChanged: (value) {
+                themeProvider.toggleTheme();
+              },
+              activeColor: themeProvider.primaryColor,
+              activeTrackColor: themeProvider.primaryColor.withOpacity(0.3),
+              inactiveThumbColor: Colors.grey[300],
+              inactiveTrackColor: Colors.grey[200],
+            ),
+            onTap: () {
+              themeProvider.toggleTheme();
             },
-            child: const Text('Saqlash'),
           ),
         ],
       ),
     );
   }
 
-  void _showExportDialog() {
+  Widget _buildAboutSection(ThemeProvider themeProvider) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.largePadding),
+      decoration: BoxDecoration(
+        color: themeProvider.surfaceColor,
+        borderRadius: BorderRadius.circular(AppConstants.largeRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: _buildSettingItem(
+        icon: Icons.agriculture,
+        title: 'Ferma App',
+        subtitle: 'Professional tovuq fermasi boshqaruv ilovasi',
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppConstants.successColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppConstants.successColor.withOpacity(0.3),
+            ),
+          ),
+          child: Text(
+            'v1.0.0',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppConstants.successColor,
+            ),
+          ),
+        ),
+        onTap: () => _showAboutDialog(themeProvider),
+      ),
+    );
+  }
+
+  Widget _buildSettingItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget trailing,
+    VoidCallback? onTap,
+  }) {
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: themeProvider.primaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      icon,
+                      color: themeProvider.primaryColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: themeProvider.textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: themeProvider.secondaryTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  trailing,
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAboutDialog(ThemeProvider themeProvider) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eksport formatini tanlang'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.table_chart),
-              title: const Text('Excel (.xlsx)'),
-              onTap: () {
-                Navigator.pop(context);
-                _showSnackBar('Excel eksport funksiyasi keyincha qo\'shiladi');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf),
-              title: const Text('PDF'),
-              onTap: () {
-                Navigator.pop(context);
-                _showSnackBar('PDF eksport funksiyasi keyincha qo\'shiladi');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.table_view),
-              title: const Text('CSV'),
-              onTap: () {
-                Navigator.pop(context);
-                _showSnackBar('CSV eksport funksiyasi keyincha qo\'shiladi');
-              },
-            ),
-          ],
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: themeProvider.surfaceColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: themeProvider.primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.agriculture,
+                  color: themeProvider.primaryColor,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Ferma App',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: themeProvider.textColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Versiya 1.0.0',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: themeProvider.secondaryTextColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Professional tovuq fermasi boshqaruv ilovasi. '
+                'Tovuqlar, tuxum, sotuvlar va mijozlarni boshqarish uchun mo\'ljallangan.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: themeProvider.secondaryTextColor,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: themeProvider.primaryColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => Navigator.pop(context),
+                    child: Center(
+                      child: Text(
+                        'Tushunarli',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
-
-  void _showAboutDialog() {
-    showAboutDialog(
-      context: context,
-      applicationName: 'Ferma App',
-      applicationVersion: '1.0.0',
-      applicationIcon: const Icon(
-        Icons.agriculture,
-        size: 48,
-        color: AppTheme.primaryColor,
-      ),
-      children: [
-        const Text(
-          'Professional tovuq fermasi boshqaruv ilovasi. '
-          'Tovuqlar, tuxum, sotuvlar va mijozlarni boshqarish uchun mo\'ljallangan.',
-        ),
-      ],
-    );
-  }
-
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.primaryColor),
     );
   }
 }

@@ -13,7 +13,7 @@ import 'dart:async';
 class AuthProvider with ChangeNotifier {
   final StorageService _storage = StorageService();
   final SupabaseClient _supabase = SupabaseConfig.client;
-  
+
   // STREAM SUBSCRIPTION FOR PROPER DISPOSAL
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -35,7 +35,7 @@ class AuthProvider with ChangeNotifier {
     _init();
     _checkSavedLogin();
   }
-  
+
   // Check if user was previously logged in
   Future<void> _checkSavedLogin() async {
     try {
@@ -43,7 +43,7 @@ class AuthProvider with ChangeNotifier {
       final savedEmail = prefs.getString('saved_email');
       final savedUserId = prefs.getString('saved_user_id');
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-      
+
       if (isLoggedIn && savedEmail != null && savedUserId != null) {
         // Try to load offline data while checking online status
         final offlineFarm = await _storage.loadFarmOffline(savedUserId);
@@ -52,7 +52,7 @@ class AuthProvider with ChangeNotifier {
           _isOfflineMode = true;
           notifyListeners();
         }
-        
+
         // Try to refresh session in background
         _refreshSession();
       }
@@ -60,7 +60,7 @@ class AuthProvider with ChangeNotifier {
       print('Error checking saved login: $e');
     }
   }
-  
+
   Future<void> _refreshSession() async {
     try {
       await _supabase.auth.refreshSession();
@@ -102,27 +102,30 @@ class AuthProvider with ChangeNotifier {
   Future<void> _init() async {
     // DISPOSE PREVIOUS SUBSCRIPTION IF EXISTS
     await _authSubscription?.cancel();
-    
+
     // SET UP NEW SUBSCRIPTION WITH PROPER ERROR HANDLING
-    _authSubscription = _supabase.auth.onAuthStateChange.listen((AuthState data) async {
-      try {
-        _user = data.session?.user;
-        if (_user != null) {
-          await _loadFarmData();
-        } else {
-          _farm = null;
+    _authSubscription = _supabase.auth.onAuthStateChange.listen(
+      (AuthState data) async {
+        try {
+          _user = data.session?.user;
+          if (_user != null) {
+            await _loadFarmData();
+          } else {
+            _farm = null;
+          }
+          if (mounted) {
+            notifyListeners();
+          }
+        } catch (e) {
+          print('Auth state change error: $e');
+          // Don't let auth state errors crash the app
         }
-        if (mounted) {
-          notifyListeners();
-        }
-      } catch (e) {
-        print('Auth state change error: $e');
-        // Don't let auth state errors crash the app
-      }
-    }, onError: (error) {
-      print('Auth stream error: $error');
-      // Handle stream errors gracefully
-    });
+      },
+      onError: (error) {
+        print('Auth stream error: $error');
+        // Handle stream errors gracefully
+      },
+    );
 
     // Check current session
     final currentSession = _supabase.auth.currentSession;
@@ -131,23 +134,23 @@ class AuthProvider with ChangeNotifier {
       await _loadFarmData();
     }
   }
-  
+
   // CHECK IF STILL MOUNTED TO PREVENT MEMORY LEAKS
   bool get mounted => hasListeners;
-  
+
   // PROPER DISPOSAL OF RESOURCES
   @override
   void dispose() {
     print('🧹 AuthProvider dispose qilinmoqda...');
-    
+
     // Cancel auth subscription
     _authSubscription?.cancel();
     _authSubscription = null;
-    
+
     // Clear data
     _user = null;
     _farm = null;
-    
+
     super.dispose();
     print('✅ AuthProvider dispose qilindi');
   }
@@ -175,10 +178,10 @@ class AuthProvider with ChangeNotifier {
         }
       } catch (e) {
         print('Supabase dan yuklashda xatolik: $e');
-        
+
         // Try to load from Hive first
         await _loadFromHive();
-        
+
         // If no offline data, create new farm
         if (_farm == null && mounted) {
           _farm = Farm(
@@ -194,7 +197,7 @@ class AuthProvider with ChangeNotifier {
           await _saveToSupabase();
           await _saveToHive();
         }
-        
+
         _isOfflineMode = true;
       }
     } catch (e) {
@@ -216,10 +219,31 @@ class AuthProvider with ChangeNotifier {
     if (_farm == null || _user == null) return;
 
     try {
-      await _supabase.from('farms').upsert(_farm!.toJson());
+      // Supabase farms jadvali uchun to'g'ri format
+      final farmData = {
+        'owner_id': _user!.id,
+        'name': _farm!.name,
+        'description': _farm!.description ?? '',
+        'address': _farm!.address ?? '',
+        'chicken_count': _farm!.chickenCount,
+        'egg_production_rate': _farm!.eggProductionRate.toDouble(),
+        'created_at': _farm!.createdAt?.toIso8601String(),
+        'updated_at': _farm!.updatedAt?.toIso8601String(),
+      };
+
+      print('🔄 Supabase\'ga saqlash: ${farmData['name']}');
+
+      // Supabase'ga saqlash
+      await _supabase.from('farms').upsert(farmData);
+
+      print('✅ Farm Supabase\'ga muvaffaqiyatli saqlandi: ${_farm!.name}');
     } catch (e) {
-      _error = 'Supabase\'ga saqlashda xatolik: $e';
+      print('❌ Supabase saqlash xatosi: $e');
+      _error = 'Ma\'lumotlar bazasiga saqlashda xatolik: $e';
       notifyListeners();
+
+      // Agar Supabase ishlamasa, offline rejimga o'tish
+      _isOfflineMode = true;
     }
   }
 
@@ -258,12 +282,16 @@ class AuthProvider with ChangeNotifier {
       _error = null;
       notifyListeners();
 
+      print('🔄 Ro\'yxatdan o\'tish jarayoni boshlandi: $email');
+
       final response = await _supabase.auth.signUp(
         email: email,
         password: password,
       );
 
       if (response.user != null) {
+        print('✅ Foydalanuvchi yaratildi: ${response.user!.id}');
+
         // Yangi ferma yaratish
         _farm = Farm(
           id: response.user!.id,
@@ -280,20 +308,32 @@ class AuthProvider with ChangeNotifier {
           updatedAt: DateTime.now(),
         );
 
-        await _saveToSupabase();
+        print('🏗️ Ferma obyekti yaratildi: ${_farm!.name}');
+
+        // Avval Hive'ga saqlash (offline backup)
         await _saveToHive();
+        print('💾 Ferma Hive\'ga saqlandi');
+
+        // Keyin Supabase'ga saqlash
+        await _saveToSupabase();
+        print('☁️ Ferma Supabase\'ga saqlandi');
 
         // Save login state
         await _saveLoginState(response.user!.id, email);
+        print('🔐 Login holati saqlandi');
 
         return true;
+      } else {
+        _error = 'Foydalanuvchi yaratilmadi';
+        return false;
       }
-      return false;
     } on AuthException catch (e) {
+      print('❌ Auth xatosi: ${e.message}');
       _error = _getAuthErrorMessage(e.message);
       return false;
     } catch (e) {
-      _error = 'Kutilmagan xatolik: $e';
+      print('❌ Umumiy xatolik: $e');
+      _error = 'Ro\'yxatdan o\'tishda xatolik: $e';
       return false;
     } finally {
       _isLoading = false;
@@ -365,7 +405,7 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
   }
-  
+
   // Save login state to SharedPreferences
   Future<void> _saveLoginState(String userId, String email) async {
     try {
@@ -377,7 +417,7 @@ class AuthProvider with ChangeNotifier {
       print('Error saving login state: $e');
     }
   }
-  
+
   // Clear login state from SharedPreferences
   Future<void> _clearLoginState() async {
     try {
@@ -408,7 +448,7 @@ class AuthProvider with ChangeNotifier {
 
       // Get current session
       final currentSession = _supabase.auth.currentSession;
-      
+
       if (currentSession == null) {
         _user = null;
         _farm = null;
@@ -418,16 +458,18 @@ class AuthProvider with ChangeNotifier {
       // Check if session is expired
       final now = DateTime.now().toUtc();
       // Convert expiresAt timestamp to DateTime
-      final expiresAt = currentSession.expiresAt != null 
-          ? DateTime.fromMillisecondsSinceEpoch(currentSession.expiresAt! * 1000).toUtc()
+      final expiresAt = currentSession.expiresAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              currentSession.expiresAt! * 1000,
+            ).toUtc()
           : now.add(const Duration(days: 1));
-      
+
       if (expiresAt.isBefore(now)) {
         // Session expired, try to refresh
         try {
           final response = await _supabase.auth.refreshSession();
           _user = response.session?.user;
-          
+
           if (_user != null) {
             await _loadFarmData();
           } else {
@@ -469,6 +511,12 @@ class AuthProvider with ChangeNotifier {
       return 'Noto\'g\'ri email manzil';
     } else if (message.contains('User already registered')) {
       return 'Bu foydalanuvchi allaqachon mavjud';
+    } else if (message.contains('Database error saving new user')) {
+      return 'Ma\'lumotlar bazasida xatolik. Internet aloqasini tekshiring';
+    } else if (message.contains('unexpected_failure')) {
+      return 'Kutilmagan xatolik. Qayta urinib ko\'ring';
+    } else if (message.contains('connection')) {
+      return 'Internet aloqasi yo\'q. Qayta urinib ko\'ring';
     } else {
       return 'Xatolik yuz berdi: $message';
     }

@@ -118,9 +118,9 @@ class Farm {
     updatedAt = DateTime.now();
   }
 
-  void addChickenDeath(int count) {
+  void addChickenDeath(int count, {String? note}) {
     if (chicken != null) {
-      chicken!.addDeath(count);
+      chicken!.addDeath(count, note: note);
       updatedAt = DateTime.now();
     }
   }
@@ -193,6 +193,7 @@ class Farm {
     double pricePerTray,
     DateTime deliveryDate, {
     String? note,
+    bool deductFromStock = true,
   }) {
     // Validate input
     if (trayCount <= 0 || pricePerTray < 0) {
@@ -206,7 +207,7 @@ class Farm {
     }
 
     // Check available stock if egg data exists
-    if (egg != null) {
+    if (egg != null && deductFromStock) {
       final availableStock = egg!.currentStock;
       if (trayCount > availableStock) {
         return false; // Not enough stock

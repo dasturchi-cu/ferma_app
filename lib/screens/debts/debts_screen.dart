@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../utils/constants.dart';
-import '../../utils/app_theme.dart';
 import '../../providers/farm_provider.dart';
 import '../../models/customer.dart';
+import '../../widgets/search_bar_with_filters.dart';
+import '../../providers/search_provider.dart';
 
 class DebtsScreen extends StatefulWidget {
   const DebtsScreen({super.key});
@@ -17,7 +17,6 @@ class _DebtsScreenState extends State<DebtsScreen>
     with TickerProviderStateMixin {
   late AnimationController _animationController;
   String _searchQuery = '';
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -26,48 +25,88 @@ class _DebtsScreenState extends State<DebtsScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    // Start initial animations so items are visible
+    _animationController.forward();
+
+    // Force refresh when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
     _animationController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
-  List<Customer> _getFilteredDebts(List<Customer> customers) {
-    // Get all customers with debt (both regular and debt-only)
-    final regularCustomersWithDebt = customers
-        .where(
-          (customer) =>
-              !customer.name.startsWith('QARZ:') && customer.totalDebt > 0,
+  List<Customer> _getFilteredDebts(
+    List<Customer> customers,
+    SearchProvider sp,
+  ) {
+    // Show ONLY debt-only customers (QARZ:) having unpaid debt
+    final debtCustomers = customers
+        .where((c) => c.name.startsWith('QARZ:') && c.totalDebt > 0)
+        .where((c) {
+          // query filter (name/phone)
+          final q = sp.query.trim().toLowerCase();
+          if (q.isNotEmpty) {
+            final name = c.name.replaceFirst('QARZ: ', '').toLowerCase();
+            final phone = c.phone.toLowerCase();
+            if (!(name.contains(q) || phone.contains(q))) return false;
+          }
+          // amount range filter
+          if (sp.minAmount != null && c.totalDebt < sp.minAmount!) return false;
+          if (sp.maxAmount != null && c.totalDebt > sp.maxAmount!) return false;
+          // date range filter (by unpaid order delivery dates)
+          if (sp.fromDate != null || sp.toDate != null) {
+            final from = sp.fromDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final to = sp.toDate ?? DateTime(2100);
+            final hasInRange = c.orders.any(
+              (o) =>
+                  !o.isPaid &&
+                  o.deliveryDate.isAfter(
+                    from.subtract(const Duration(days: 1)),
+                  ) &&
+                  o.deliveryDate.isBefore(to.add(const Duration(days: 1))),
+            );
+            if (!hasInRange) return false;
+          }
+          // status filter (optional)
+          if (sp.status != null) {
+            final now = DateTime.now();
+            if (sp.status == 'overdue') {
+              final overdue = c.orders.any(
+                (o) => !o.isPaid && o.deliveryDate.isBefore(now),
+              );
+              if (!overdue) return false;
+            } else if (sp.status == 'completed') {
+              // Debts page shows unpaid; completed means zero debt
+              if (c.totalDebt > 0) return false;
+            }
+          }
+          return true;
+        })
+        .map(
+          (customer) => Customer(
+            id: customer.id,
+            name: customer.name.replaceFirst('QARZ: ', ''),
+            phone: customer.phone,
+            address: customer.address,
+            orders: customer.orders,
+          ),
         )
         .toList();
-    final debtOnlyCustomers = customers
-        .where(
-          (customer) =>
-              customer.name.startsWith('QARZ:') && customer.totalDebt > 0,
-        )
-        .toList();
 
-    // Clean debt customer names (remove QARZ: prefix for display)
-    final cleanedDebtCustomers = debtOnlyCustomers.map((customer) {
-      return Customer(
-        id: customer.id,
-        name: customer.name.replaceFirst('QARZ: ', ''),
-        phone: customer.phone,
-        address: customer.address,
-        orders: customer.orders,
-      );
-    }).toList();
+    print('🔍 Qarzdorlar ro\'yxati: ${debtCustomers.length} ta');
+    for (var customer in debtCustomers) {
+      print('  - ${customer.name} (qarz: ${customer.totalDebt})');
+    }
 
-    final allCustomersWithDebt = [
-      ...regularCustomersWithDebt,
-      ...cleanedDebtCustomers,
-    ];
-
-    if (_searchQuery.isEmpty) return allCustomersWithDebt;
-    return allCustomersWithDebt
+    if (_searchQuery.isEmpty) return debtCustomers;
+    return debtCustomers
         .where(
           (customer) =>
               customer.name.toLowerCase().contains(_searchQuery.toLowerCase()),
@@ -76,36 +115,48 @@ class _DebtsScreenState extends State<DebtsScreen>
   }
 
   double _getTotalDebt(List<Customer> customers) {
-    return customers.fold(0.0, (sum, customer) => sum + customer.totalDebt);
+    // Only count dedicated debt-only customers (names prefixed with 'QARZ:')
+    return customers
+        .where((c) => c.name.startsWith('QARZ:'))
+        .fold(0.0, (sum, customer) => sum + customer.totalDebt);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FarmProvider>(
-      builder: (context, farmProvider, child) {
+    return Consumer2<FarmProvider, SearchProvider>(
+      builder: (context, farmProvider, sp, child) {
         final farm = farmProvider.farm;
         final customers = farm?.customers ?? [];
-        final filteredDebts = _getFilteredDebts(customers);
+        final filteredDebts = _getFilteredDebts(customers, sp);
+        // Count only debt-only customers in totals shown on Debts screen
         final totalDebt = _getTotalDebt(customers);
 
+        // Debug: Force rebuild when customers change
+        print(
+          '🔄 Qarz sahifasi yangilandi. Mijozlar: ${customers.length}, Qarzdorlar: ${filteredDebts.length}',
+        );
+
         return Scaffold(
-          backgroundColor: Colors.grey[50],
+          backgroundColor: const Color(0xFFF5F9FF), // Och ko'k fon
           body: Column(
             children: [
-              // Modern Header with Gradient Background
+              // Modern Blue Gradient Header
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [const Color(0xFFFF7043), const Color(0xFFFF8A65)],
+                    colors: [
+                      const Color(0xFF1E88E5), // Asosiy ko'k
+                      const Color(0xFF64B5F6), // Ochiq ko'k
+                    ],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+                      color: const Color(0xFF1E88E5).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
                   ],
                 ),
@@ -126,10 +177,10 @@ class _DebtsScreenState extends State<DebtsScreen>
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
                                   color: Colors.white.withOpacity(0.3),
-                                  width: 1,
+                                  width: 1.5,
                                 ),
                               ),
-                              child: Icon(
+                              child: const Icon(
                                 Icons.account_balance_wallet_rounded,
                                 color: Colors.white,
                                 size: 28,
@@ -140,8 +191,10 @@ class _DebtsScreenState extends State<DebtsScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
+                                  const Text(
                                     'Qarz Daftari',
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 24,
@@ -152,6 +205,8 @@ class _DebtsScreenState extends State<DebtsScreen>
                                   const SizedBox(height: 4),
                                   Text(
                                     'Qarzdor mijozlar va to\'lovlar',
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.9),
                                       fontSize: 14,
@@ -169,7 +224,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: Colors.white.withOpacity(0.3),
-                                  width: 1,
+                                  width: 1.5,
                                 ),
                               ),
                               child: InkWell(
@@ -185,7 +240,7 @@ class _DebtsScreenState extends State<DebtsScreen>
                           ],
                         ),
                         const SizedBox(height: 24),
-                        // Modern Stats Cards
+                        // Modern Blue Stats Cards
                         Row(
                           children: [
                             Expanded(
@@ -205,8 +260,8 @@ class _DebtsScreenState extends State<DebtsScreen>
                                 "so'm",
                                 Icons.account_balance_wallet_outlined,
                                 totalDebt > 0
-                                    ? Colors.red[300]!
-                                    : Colors.green[300]!,
+                                    ? const Color(0xFFFFEB3B)
+                                    : const Color(0xFF4CAF50),
                               ),
                             ),
                           ],
@@ -216,33 +271,53 @@ class _DebtsScreenState extends State<DebtsScreen>
                   ),
                 ),
               ),
-              // Qidiruv paneli
+              // Search bar with filters (debounced)
               if (customers.where((c) => c.totalDebt > 0).isNotEmpty)
-                _buildSearchBar(),
+                const SearchBarWithFilters(
+                  hintText: 'Mijoz ismi yoki telefon...',
+                  showAmount: true,
+                  showStatus: false,
+                ),
 
-              // Asosiy kontent
+              // Main content
               Expanded(
-                child:
-                    filteredDebts.isEmpty &&
-                        customers.where((c) => c.totalDebt > 0).isNotEmpty
-                    ? _buildNotFound()
-                    : customers.where((c) => c.totalDebt > 0).isEmpty
-                    ? _buildEmpty()
-                    : _buildList(filteredDebts),
+                child: Builder(
+                  builder: (context) {
+                    print(
+                      '🎯 UI render: filteredDebts=${filteredDebts.length}, customers=${customers.length}',
+                    );
+
+                    if (filteredDebts.isEmpty &&
+                        customers.where((c) => c.totalDebt > 0).isNotEmpty) {
+                      print('🎯 Ko\'rsatilmoqda: _buildNotFound()');
+                      return _buildNotFound();
+                    } else if (customers
+                        .where((c) => c.totalDebt > 0)
+                        .isEmpty) {
+                      print('🎯 Ko\'rsatilmoqda: _buildEmpty()');
+                      return _buildEmpty();
+                    } else {
+                      print(
+                        '🎯 Ko\'rsatilmoqda: _buildList() with ${filteredDebts.length} items',
+                      );
+                      return _buildList(filteredDebts);
+                    }
+                  },
+                ),
               ),
             ],
           ),
           floatingActionButton: Container(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [const Color(0xFFFF7043), const Color(0xFFFF8A65)],
+                colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
               ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF7043).withOpacity(0.4),
+                  color: const Color(0xFF2196F3).withOpacity(0.4),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -266,56 +341,6 @@ class _DebtsScreenState extends State<DebtsScreen>
     );
   }
 
-  Widget _buildHeaderStats(List<Customer> filteredDebts, double totalDebt) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.primaryColor,
-            AppTheme.primaryColor.withOpacity(0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryColor.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatItem(
-                icon: Icons.people_outline,
-                label: 'Qarzdor mijozlar',
-                value: '${filteredDebts.length}',
-              ),
-              Container(
-                height: 40,
-                width: 1,
-                color: Colors.white.withOpacity(0.3),
-              ),
-              _buildStatItem(
-                icon: Icons.account_balance_wallet_outlined,
-                label: 'Umumiy qarz',
-                value: '${totalDebt.toStringAsFixed(0)} so\'m',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildModernStatCard(
     String title,
     String value,
@@ -328,7 +353,7 @@ class _DebtsScreenState extends State<DebtsScreen>
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -367,12 +392,16 @@ class _DebtsScreenState extends State<DebtsScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -394,70 +423,7 @@ class _DebtsScreenState extends State<DebtsScreen>
     );
   }
 
-  Widget _buildStatItem({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white, size: 24),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (value) => setState(() => _searchQuery = value),
-        decoration: InputDecoration(
-          hintText: 'Mijoz ismini qidirish...',
-          prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
-      ),
-    );
-  }
+  // Legacy search removed; SearchBarWithFilters is used instead
 
   Widget _buildEmpty() {
     return Center(
@@ -465,24 +431,24 @@ class _DebtsScreenState extends State<DebtsScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: const Color(0xFFE3F2FD),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.receipt_long_outlined,
               size: 64,
-              color: Colors.grey[400],
+              color: const Color(0xFF2196F3),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Text(
             "Hozircha qarz yozuvi yo'q",
             style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+              color: Colors.grey[700],
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
@@ -517,6 +483,9 @@ class _DebtsScreenState extends State<DebtsScreen>
   }
 
   Widget _buildList(List<Customer> filteredDebts) {
+    // Restart animation on rebuild to ensure items slide into view
+    _animationController.reset();
+    _animationController.forward();
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: filteredDebts.length,
@@ -539,16 +508,15 @@ class _DebtsScreenState extends State<DebtsScreen>
 
   Widget _buildCustomerCard(Customer customer) {
     final isHighDebt = customer.totalDebt > 1000000;
-    final unpaidOrders = customer.orders.where((order) => !order.isPaid).length;
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
+            color: const Color(0xFF2196F3).withOpacity(0.08),
+            blurRadius: 16,
             offset: const Offset(0, 4),
           ),
         ],
@@ -556,7 +524,7 @@ class _DebtsScreenState extends State<DebtsScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           onTap: () => _showCustomerDetails(customer),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -564,30 +532,38 @@ class _DebtsScreenState extends State<DebtsScreen>
               children: [
                 // Avatar
                 Container(
-                  width: 50,
-                  height: 50,
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: isHighDebt
-                          ? [Colors.red[400]!, Colors.red[600]!]
-                          : [
-                              AppConstants.primaryColor.withOpacity(0.7),
-                              AppConstants.primaryColor,
-                            ],
+                          ? [const Color(0xFFF44336), const Color(0xFFE91E63)]
+                          : [const Color(0xFF2196F3), const Color(0xFF1976D2)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            (isHighDebt
+                                    ? const Color(0xFFF44336)
+                                    : const Color(0xFF2196F3))
+                                .withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.person_outline,
                     color: Colors.white,
-                    size: 24,
+                    size: 28,
                   ),
                 ),
                 const SizedBox(width: 16),
 
-                // Ma'lumotlar
+                // Information
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -597,10 +573,10 @@ class _DebtsScreenState extends State<DebtsScreen>
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                          color: Color(0xFF1A1A1A),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Icon(
@@ -608,12 +584,12 @@ class _DebtsScreenState extends State<DebtsScreen>
                             size: 16,
                             color: Colors.grey[600],
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           Text(
                             'Qarz: ${customer.totalDebt.toStringAsFixed(0)} so\'m',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Colors.grey[600],
+                              color: Colors.grey[700],
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -621,19 +597,19 @@ class _DebtsScreenState extends State<DebtsScreen>
                       ),
                       if (customer.phone.isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.only(top: 6),
                           child: Row(
                             children: [
                               Icon(
-                                Icons.phone,
+                                Icons.phone_outlined,
                                 size: 14,
                                 color: Colors.grey[500],
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 6),
                               Text(
                                 customer.phone,
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 13,
                                   color: Colors.grey[500],
                                 ),
                               ),
@@ -644,30 +620,41 @@ class _DebtsScreenState extends State<DebtsScreen>
                   ),
                 ),
 
-                // Tugmalar
+                // Action buttons
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.payment_outlined,
-                        color: Colors.green[600],
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      onPressed: () => _showPaymentDialog(customer),
-                      tooltip: 'To\'lov qilish',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.green[50],
-                        padding: const EdgeInsets.all(8),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.payment_outlined,
+                          color: Color(0xFF4CAF50),
+                          size: 20,
+                        ),
+                        onPressed: () => _showPaymentDialog(customer),
+                        tooltip: 'To\'lov qilish',
+                        padding: const EdgeInsets.all(10),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(Icons.list_alt, color: Colors.blue[600]),
-                      onPressed: () => _showOrdersDialog(customer),
-                      tooltip: 'Buyurtmalar',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.blue[50],
-                        padding: const EdgeInsets.all(8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.list_alt_outlined,
+                          color: Color(0xFF2196F3),
+                          size: 20,
+                        ),
+                        onPressed: () => _showOrdersDialog(customer),
+                        tooltip: 'Buyurtmalar',
+                        padding: const EdgeInsets.all(10),
                       ),
                     ),
                   ],
@@ -691,16 +678,20 @@ class _DebtsScreenState extends State<DebtsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFF2196F3).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.money_off, color: Colors.red, size: 24),
+              child: const Icon(
+                Icons.person_add,
+                color: Color(0xFF2196F3),
+                size: 24,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('Qarz Qo\'shish'),
@@ -723,10 +714,15 @@ class _DebtsScreenState extends State<DebtsScreen>
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Qarzdor ismi',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.person,
+                      color: Color(0xFF2196F3),
+                    ),
                   ),
                   validator: (v) => (v?.trim().isEmpty ?? true)
                       ? 'Ism kiritish majburiy'
@@ -736,10 +732,15 @@ class _DebtsScreenState extends State<DebtsScreen>
                 TextFormField(
                   controller: phoneController,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Telefon raqami',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.phone,
+                      color: Color(0xFF2196F3),
+                    ),
                   ),
                   validator: (v) {
                     if (v?.trim().isEmpty ?? true)
@@ -752,20 +753,30 @@ class _DebtsScreenState extends State<DebtsScreen>
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: addressController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Manzil (ixtiyoriy)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_on),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.location_on,
+                      color: Color(0xFF2196F3),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: debtController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Qarz miqdori',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.money),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.money,
+                      color: Color(0xFF2196F3),
+                    ),
                     suffixText: "so'm",
                   ),
                   validator: (v) {
@@ -778,10 +789,15 @@ class _DebtsScreenState extends State<DebtsScreen>
                 TextFormField(
                   controller: noteController,
                   maxLines: 2,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Izoh (ixtiyoriy)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.note),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.note,
+                      color: Color(0xFF2196F3),
+                    ),
                     hintText: 'Qarz sababi haqida...',
                   ),
                 ),
@@ -811,27 +827,34 @@ class _DebtsScreenState extends State<DebtsScreen>
                   note: noteController.text.trim(),
                 );
 
-                // Safe navigation check
                 if (context.mounted) {
                   Navigator.pop(context);
 
                   if (success) {
                     _showSnackBar(
                       '${nameController.text.trim()} ga ${debtController.text} so\'m qarz qo\'shildi',
-                      Colors.green,
+                      const Color(0xFF4CAF50),
                     );
+
+                    // Force UI refresh after adding debt
+                    setState(() {});
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    setState(() {});
                   } else {
                     _showSnackBar(
                       farmProvider.error ?? 'Xatolik yuz berdi',
-                      Colors.red,
+                      const Color(0xFFF44336),
                     );
                   }
                 }
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: const Color(0xFF2196F3),
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Qarz Qo\'shish'),
           ),
@@ -846,23 +869,30 @@ class _DebtsScreenState extends State<DebtsScreen>
         .toList();
 
     if (unpaidOrders.isEmpty) {
-      _showSnackBar('Bu mijozda to\'lanmagan buyurtmalar yo\'q', Colors.orange);
+      _showSnackBar(
+        'Bu mijozda to\'lanmagan buyurtmalar yo\'q',
+        const Color(0xFFFFA726),
+      );
       return;
     }
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFF4CAF50).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.payment, color: Colors.green, size: 24),
+              child: const Icon(
+                Icons.payment,
+                color: Color(0xFF4CAF50),
+                size: 24,
+              ),
             ),
             const SizedBox(width: 12),
             const Text('Buyurtmalarni to\'lash'),
@@ -899,6 +929,9 @@ class _DebtsScreenState extends State<DebtsScreen>
                     final order = unpaidOrders[index];
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: ListTile(
                         dense: true,
                         title: Text('${order.trayCount} fletka'),
@@ -908,26 +941,84 @@ class _DebtsScreenState extends State<DebtsScreen>
                         ),
                         trailing: ElevatedButton(
                           onPressed: () async {
-                            final success = await _markOrderAsPaid(
-                              customer.id,
-                              order.id,
+                            // Summa so'rash
+                            final controller = TextEditingController(
+                              text: order.totalAmount.toStringAsFixed(0),
                             );
+                            final paid = await showDialog<double>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('To\'lov summasi'),
+                                content: TextField(
+                                  controller: controller,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Summani kiriting',
+                                    suffixText: "so'm",
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('Bekor'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      final v = double.tryParse(
+                                        controller.text,
+                                      );
+                                      Navigator.pop(ctx, v);
+                                    },
+                                    child: const Text('Tasdiqlash'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (paid == null) return;
+
+                            final farmProvider = Provider.of<FarmProvider>(
+                              context,
+                              listen: false,
+                            );
+
+                            bool success;
+                            if (paid >= order.totalAmount) {
+                              success = await farmProvider
+                                  .markCustomerOrderAsPaid(
+                                    customer.id,
+                                    order.id,
+                                  );
+                            } else {
+                              success = await farmProvider
+                                  .payCustomerOrderAmount(
+                                    customer.id,
+                                    order.id,
+                                    paid,
+                                  );
+                            }
+
                             if (success) {
                               if (mounted) Navigator.pop(context);
                               _showSnackBar(
-                                'Buyurtma to\'landi!',
-                                Colors.green,
+                                'To\'lov qabul qilindi',
+                                const Color(0xFF4CAF50),
                               );
                             } else {
-                              _showSnackBar('Xatolik yuz berdi', Colors.red);
+                              _showSnackBar(
+                                'Xatolik yuz berdi',
+                                const Color(0xFFF44336),
+                              );
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
+                            backgroundColor: const Color(0xFF4CAF50),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
                           child: const Text(
@@ -953,19 +1044,13 @@ class _DebtsScreenState extends State<DebtsScreen>
     );
   }
 
-  Future<bool> _markOrderAsPaid(String customerId, String orderId) async {
-    try {
-      final farmProvider = Provider.of<FarmProvider>(context, listen: false);
-      return await farmProvider.markCustomerOrderAsPaid(customerId, orderId);
-    } catch (e) {
-      return false;
-    }
-  }
+  // Removed unused helper _markOrderAsPaid to avoid linter warning
 
   void _showOrdersDialog(Customer customer) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('${customer.name} buyurtmalari'),
         content: SizedBox(
           width: double.maxFinite,
@@ -980,12 +1065,14 @@ class _DebtsScreenState extends State<DebtsScreen>
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: order.isPaid
-                            ? Colors.green.withOpacity(0.1)
-                            : Colors.orange.withOpacity(0.1),
+                            ? const Color(0xFFE8F5E9)
+                            : const Color(0xFFFFF3E0),
                         child: Icon(
                           order.isPaid ? Icons.check : Icons.schedule,
-                          color: order.isPaid ? Colors.green : Colors.orange,
-                          size: 16,
+                          color: order.isPaid
+                              ? const Color(0xFF4CAF50)
+                              : const Color(0xFFFFA726),
+                          size: 18,
                         ),
                       ),
                       title: Text('${order.trayCount} fletka'),
@@ -996,7 +1083,9 @@ class _DebtsScreenState extends State<DebtsScreen>
                       trailing: Text(
                         order.isPaid ? 'To\'langan' : 'Kutilmoqda',
                         style: TextStyle(
-                          color: order.isPaid ? Colors.green : Colors.orange,
+                          color: order.isPaid
+                              ? const Color(0xFF4CAF50)
+                              : const Color(0xFFFFA726),
                           fontWeight: FontWeight.w500,
                           fontSize: 12,
                         ),
@@ -1019,10 +1108,10 @@ class _DebtsScreenState extends State<DebtsScreen>
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1030,15 +1119,26 @@ class _DebtsScreenState extends State<DebtsScreen>
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppConstants.primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2196F3).withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.person,
-                    color: AppConstants.primaryColor,
-                    size: 24,
+                    color: Colors.white,
+                    size: 28,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -1068,33 +1168,48 @@ class _DebtsScreenState extends State<DebtsScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF2196F3).withOpacity(0.1),
+                    const Color(0xFF1976D2).withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFF2196F3).withOpacity(0.2),
+                  width: 1.5,
+                ),
               ),
               child: Column(
                 children: [
                   Text(
                     'Umumiy qarz',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Text(
                     '${customer.totalDebt.toStringAsFixed(0)} so\'m',
                     style: const TextStyle(
-                      fontSize: 24,
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: Color(0xFF1976D2),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
@@ -1106,9 +1221,13 @@ class _DebtsScreenState extends State<DebtsScreen>
                     icon: const Icon(Icons.payment),
                     label: const Text('To\'lov'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: const Color(0xFF4CAF50),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
                     ),
                   ),
                 ),
@@ -1122,8 +1241,15 @@ class _DebtsScreenState extends State<DebtsScreen>
                     icon: const Icon(Icons.list_alt),
                     label: const Text('Buyurtmalar'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      foregroundColor: const Color(0xFF2196F3),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: const BorderSide(
+                        color: Color(0xFF2196F3),
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -1136,7 +1262,10 @@ class _DebtsScreenState extends State<DebtsScreen>
   }
 
   void _showStatistics(List<Customer> customers) {
-    final customersWithDebt = customers.where((c) => c.totalDebt > 0).toList();
+    // Consider ONLY debt-only customers ('QARZ:') for statistics
+    final customersWithDebt = customers
+        .where((c) => c.name.startsWith('QARZ:') && c.totalDebt > 0)
+        .toList();
 
     if (customersWithDebt.isEmpty) {
       _showSnackBar(
@@ -1166,12 +1295,23 @@ class _DebtsScreenState extends State<DebtsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
           children: [
-            Icon(Icons.analytics, color: Colors.blue),
-            SizedBox(width: 12),
-            Text('Qarz Statistikasi'),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2196F3).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.analytics,
+                color: Color(0xFF2196F3),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Qarz Statistikasi'),
           ],
         ),
         content: Column(
@@ -1197,7 +1337,28 @@ class _DebtsScreenState extends State<DebtsScreen>
               'Eng kichik qarz:',
               '${minDebtCustomer.totalDebt.toStringAsFixed(0)} so\'m (${minDebtCustomer.name})',
             ),
-            const Divider(),
+            const Divider(height: 24),
+            // Top 5 qarzdorlar ro'yxati (ism bilan birga ko'rsatamiz)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Top qarzdorlar:',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...(() {
+              final list = List<Customer>.from(customersWithDebt);
+              list.sort((a, b) => b.totalDebt.compareTo(a.totalDebt));
+              return list
+                  .take(5)
+                  .map((c) => _buildStatRow(
+                        c.name,
+                        '${c.totalDebt.toStringAsFixed(0)} so\'m',
+                      ))
+                  .toList();
+            })(),
+            const Divider(height: 24),
             _buildStatRow('Jami buyurtmalar:', '$totalOrders ta'),
             _buildStatRow('To\'langan:', '$paidOrders ta'),
             _buildStatRow('To\'lanmagan:', '${totalOrders - paidOrders} ta'),
@@ -1207,8 +1368,11 @@ class _DebtsScreenState extends State<DebtsScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.primaryColor,
+              backgroundColor: const Color(0xFF2196F3),
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Yopish'),
           ),
@@ -1219,7 +1383,7 @@ class _DebtsScreenState extends State<DebtsScreen>
 
   Widget _buildStatRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1242,12 +1406,9 @@ class _DebtsScreenState extends State<DebtsScreen>
         content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}.${date.month.toString().padLeft(2, '0')}.${date.year}';
   }
 }

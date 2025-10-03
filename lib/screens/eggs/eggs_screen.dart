@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../../providers/farm_provider.dart';
-import '../../utils/constants.dart';
 import '../../widgets/stat_card.dart';
+import '../main/main_screen.dart';
+import '../../widgets/search_bar_with_filters.dart';
+import '../../providers/search_provider.dart';
 
 class EggsScreen extends StatefulWidget {
   const EggsScreen({super.key});
@@ -17,13 +20,27 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _trayCountController = TextEditingController();
   final _notesController = TextEditingController();
+  final _pricePerTrayController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
+  double _defaultPricePerTray = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _loadDefaultPrice();
+  }
+
+  Future<void> _loadDefaultPrice() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _defaultPricePerTray = prefs.getDouble('default_price_per_tray') ?? 0;
+      if (_defaultPricePerTray > 0) {
+        _pricePerTrayController.text = _defaultPricePerTray.toStringAsFixed(0);
+      }
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   @override
@@ -31,6 +48,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
     _tabController.dispose();
     _trayCountController.dispose();
     _notesController.dispose();
+    _pricePerTrayController.dispose();
     super.dispose();
   }
 
@@ -102,6 +120,22 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                       return null;
                     },
                   ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _pricePerTrayController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Tuxum narxi (fletka)',
+                      border: OutlineInputBorder(),
+                      suffixText: "so'm",
+                    ),
+                    validator: (value) {
+                      if ((value ?? '').isEmpty) return null; // optional
+                      final d = double.tryParse(value!);
+                      if (d == null || d <= 0) return 'To\'g\'ri narx kiriting';
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 16),
                   ListTile(
                     title: const Text('Sana'),
@@ -159,12 +193,23 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
         ? _notesController.text
         : null;
 
+    // Save default price if provided
+    final enteredPrice = double.tryParse(_pricePerTrayController.text);
+    if (enteredPrice != null && enteredPrice > 0) {
+      _defaultPricePerTray = enteredPrice;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble('default_price_per_tray', enteredPrice);
+      } catch (_) {}
+    }
+
     final success = await farmProvider.addEggProduction(trayCount, note: note);
 
     if (success) {
       // Reset form
       _trayCountController.clear();
       _notesController.clear();
+      // Keep price field as last used value
       setState(() {
         _selectedDate = DateTime.now();
         _selectedTime = TimeOfDay.now();
@@ -172,7 +217,9 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tuxum yig\'imi saqlandi')),
+          const SnackBar(
+            content: Text('Tuxum yig\'imi muvaffaqiyatli saqlandi'),
+          ),
         );
       }
     } else if (mounted) {
@@ -188,8 +235,8 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Consumer<FarmProvider>(
-        builder: (context, farmProvider, _) {
+      body: Consumer2<FarmProvider, SearchProvider>(
+        builder: (context, farmProvider, sp, _) {
           final egg = farmProvider.farm?.egg;
           return Column(
             children: [
@@ -200,10 +247,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFF4CAF50),
-                      const Color(0xFF66BB6A),
-                    ],
+                    colors: [const Color(0xFF4CAF50), const Color(0xFF66BB6A)],
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -294,12 +338,15 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                         Row(
                           children: [
                             Expanded(
-                              child: _buildModernStatCard(
-                                'Bugungi yigim',
-                                '${egg?.todayProduction ?? 0}',
-                                'fletka',
-                                Icons.today_rounded,
-                                Colors.white,
+                              child: GestureDetector(
+                                onTap: () => _showTodayProductionDetails(egg),
+                                child: _buildModernStatCard(
+                                  'Bugungi yigim',
+                                  '${egg?.todayProduction ?? 0}',
+                                  'fletka',
+                                  Icons.today_rounded,
+                                  Colors.white,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -334,6 +381,8 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 ],
               ),
 
+              // Note: Search removed for eggs screen per requirements
+
               // Tab Views
               Expanded(
                 child: TabBarView(
@@ -355,10 +404,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF4CAF50),
-              const Color(0xFF66BB6A),
-            ],
+            colors: [const Color(0xFF4CAF50), const Color(0xFF66BB6A)],
           ),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
@@ -375,31 +421,25 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           elevation: 0,
-          child: const Icon(
-            Icons.add_rounded,
-            size: 28,
-          ),
+          child: const Icon(Icons.add_rounded, size: 28),
         ),
       ),
     );
   }
 
   Widget _buildModernStatCard(
-      String title,
-      String value,
-      String unit,
-      IconData icon,
-      Color accentColor,
-      ) {
+    String title,
+    String value,
+    String unit,
+    IconData icon,
+    Color accentColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -419,11 +459,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   color: accentColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: accentColor,
-                  size: 20,
-                ),
+                child: Icon(icon, color: accentColor, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -596,7 +632,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 StatCard(
                   title: 'Umumiy Sotuvlar',
                   value:
-                  '${egg.sales?.fold(0, (sum, sale) => sum + sale.trayCount) ?? 0} fletka',
+                      '${egg.sales?.fold(0, (sum, sale) => sum + sale.trayCount) ?? 0} fletka',
                   icon: Icons.shopping_cart,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -613,6 +649,210 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   color: Theme.of(context).colorScheme.tertiary,
                 ),
               ],
+            ),
+
+            const SizedBox(height: 16),
+            // Bugungi daromad (sum of today's sales)
+            Builder(
+              builder: (context) {
+                final now = DateTime.now();
+                double todaysRevenue = 0;
+                for (final s in (egg.sales ?? [])) {
+                  if (s.date.year == now.year &&
+                      s.date.month == now.month &&
+                      s.date.day == now.day) {
+                    todaysRevenue += (s.trayCount * (s.pricePerTray ?? 0));
+                  }
+                }
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF81C784)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.attach_money, color: Color(0xFF2E7D32)),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Daromad:',
+                        style: TextStyle(
+                          color: Color(0xFF2E7D32),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${todaysRevenue.toStringAsFixed(0)} so\'m',
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(
+                            color: Color(0xFF2E7D32),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 20),
+            // Recent sales list (filtered, themed)
+            Builder(
+              builder: (context) {
+                final sp = Provider.of<SearchProvider>(context);
+                final q = sp.query.trim().toLowerCase();
+                final min = sp.minAmount;
+                final max = sp.maxAmount;
+                final from = sp.fromDate;
+                final to = sp.toDate;
+
+                final sales = (egg.sales ?? [])
+                    .where((s) {
+                      if (q.isNotEmpty) {
+                        final note = (s.note ?? '').toLowerCase();
+                        final dateStr = '${s.date.year}-${s.date.month}-${s.date.day}'.toLowerCase();
+                        final amount = (s.trayCount * (s.pricePerTray ?? 0)).toString();
+                        if (!(note.contains(q) || dateStr.contains(q) || amount.contains(q))) {
+                          return false;
+                        }
+                      }
+                      if (from != null && s.date.isBefore(from)) return false;
+                      if (to != null && s.date.isAfter(to)) return false;
+                      final total = s.trayCount * (s.pricePerTray ?? 0);
+                      if (min != null && total < min) return false;
+                      if (max != null && total > max) return false;
+                      return true;
+                    })
+                    .toList()
+                  ..sort((a, b) => b.date.compareTo(a.date));
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Theme.of(context).colorScheme.primary, Theme.of(context).colorScheme.primary.withOpacity(0.8)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(12),
+                            topRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.receipt_long, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'So\'nggi Sotuvlar (${sales.length})',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (sales.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.search_off, color: Colors.grey[500]),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Sotuvlar topilmadi',
+                                  style: TextStyle(color: Colors.grey[600]),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          itemCount: sales.length.clamp(0, 20),
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final s = sales[index];
+                            final total = (s.trayCount * (s.pricePerTray ?? 0)).toStringAsFixed(0);
+                            return InkWell(
+                              onTap: () {},
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(Icons.sell, color: Theme.of(context).colorScheme.secondary, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${s.trayCount} fletka · ${total} so\'m',
+                                            style: const TextStyle(fontWeight: FontWeight.w600),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            s.note?.isNotEmpty == true ? s.note! : 'Izoh yo\'q',
+                                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          DateFormat('yyyy-MM-dd').format(s.date),
+                                          style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
           ],
 
@@ -765,7 +1005,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 StatCard(
                   title: 'O\'rtacha Kunlik',
                   value:
-                  '${(egg.largeEggStats?['averageLarge'] ?? 0.0).toStringAsFixed(1)} fletka',
+                      '${(egg.largeEggStats?['averageLarge'] ?? 0.0).toStringAsFixed(1)} fletka',
                   icon: Icons.analytics,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -860,7 +1100,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Tuxum Yig\'ish',
                   Icons.egg,
                   Theme.of(context).colorScheme.secondary,
-                      () {
+                  () {
                     Navigator.pop(context);
                     _showAddProductionDialog();
                   },
@@ -869,7 +1109,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Sotuv',
                   Icons.sell,
                   Theme.of(context).colorScheme.primary,
-                      () {
+                  () {
                     Navigator.pop(context);
                     _showAddSaleDialog(context);
                   },
@@ -878,7 +1118,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Siniq',
                   Icons.broken_image,
                   Theme.of(context).colorScheme.error,
-                      () {
+                  () {
                     Navigator.pop(context);
                     _showAddBrokenDialog(context);
                   },
@@ -887,7 +1127,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   'Katta',
                   Icons.expand,
                   Theme.of(context).colorScheme.tertiary,
-                      () {
+                  () {
                     Navigator.pop(context);
                     _showAddLargeDialog(context);
                   },
@@ -901,11 +1141,11 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildQuickActionButton(
-      String title,
-      IconData icon,
-      Color color,
-      VoidCallback onTap,
-      ) {
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -940,7 +1180,11 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
 
     // Controllers
     final trayController = TextEditingController();
-    final priceController = TextEditingController(text: '10000');
+    final priceController = TextEditingController(
+      text: _defaultPricePerTray > 0
+          ? _defaultPricePerTray.toStringAsFixed(0)
+          : '',
+    );
     final totalController = TextEditingController();
     final paidController = TextEditingController();
     final remainingController = TextEditingController();
@@ -957,7 +1201,9 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
       final remaining = total - paid;
 
       totalController.text = total > 0 ? total.toStringAsFixed(0) : '';
-      remainingController.text = remaining != 0 ? remaining.toStringAsFixed(0) : '0';
+      remainingController.text = remaining != 0
+          ? remaining.toStringAsFixed(0)
+          : '0';
     }
 
     // Listen to changes
@@ -967,241 +1213,291 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Tuxum Sotish'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.inventory, color: Colors.blue, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Mavjud zaxira: $currentStock fletka',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          color: Colors.blue,
-                        ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          bool isSubmitting = false;
+          return AlertDialog(
+            title: const Text('Tuxum Sotish'),
+            content: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.inventory,
+                            color: Colors.blue,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Mavjud zaxira: $currentStock fletka',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Mijoz ma'lumotlari
-                const Text(
-                  'Mijoz ma\'lumotlari',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Mijoz ismi',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: (v) => (v?.trim().isEmpty ?? true) ? 'Ism kiritish majburiy' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Telefon raqami',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
-                  ),
-                  validator: (v) {
-                    if (v?.trim().isEmpty ?? true) return 'Telefon kiritish majburiy';
-                    final digits = v!.replaceAll(RegExp(r'\D'), '');
-                    if (digits.length < 7) return 'Telefon raqami juda qisqa';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: addressController,
-                  decoration: const InputDecoration(
-                    labelText: 'Manzil (ixtiyoriy)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_on),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    // Mijoz ma'lumotlari
+                    const Text(
+                      'Mijoz ma\'lumotlari',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Mijoz ismi',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person),
+                      ),
+                      validator: (v) => (v?.trim().isEmpty ?? true)
+                          ? 'Ism kiritish majburiy'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Telefon raqami',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.phone),
+                      ),
+                      validator: (v) {
+                        if (v?.trim().isEmpty ?? true)
+                          return 'Telefon kiritish majburiy';
+                        final digits = v!.replaceAll(RegExp(r'\D'), '');
+                        if (digits.length < 7)
+                          return 'Telefon raqami juda qisqa';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: addressController,
+                      decoration: const InputDecoration(
+                        labelText: 'Manzil (ixtiyoriy)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.location_on),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // Tuxum ma'lumotlari
-                const Text(
-                  'Tuxum ma\'lumotlari',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: trayController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Sotilgan fletka soni',
-                    border: OutlineInputBorder(),
-                    suffixText: 'fletka',
-                  ),
-                  validator: (v) {
-                    final n = int.tryParse(v ?? '');
-                    if (n == null || n <= 0) return 'To\'g\'ri son kiriting';
-                    if (n > currentStock) return 'Yetarli zaxira yo\'q';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: priceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Fletka narxi',
-                    border: OutlineInputBorder(),
-                    suffixText: "so'm",
-                  ),
-                  validator: (v) {
-                    final d = double.tryParse(v ?? '');
-                    if (d == null || d <= 0) return 'To\'g\'ri narx kiriting';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: totalController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    labelText: 'Umumiy summa',
-                    border: const OutlineInputBorder(),
-                    suffixText: "so'm",
-                    filled: true,
-                    fillColor: Colors.blue.withOpacity(0.1),
-                  ),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    // Tuxum ma'lumotlari
+                    const Text(
+                      'Tuxum ma\'lumotlari',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: trayController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Sotilgan fletka soni',
+                        border: OutlineInputBorder(),
+                        suffixText: 'fletka',
+                      ),
+                      validator: (v) {
+                        final n = int.tryParse(v ?? '');
+                        if (n == null || n <= 0)
+                          return 'To\'g\'ri son kiriting';
+                        if (n > currentStock) return 'Yetarli zaxira yo\'q';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Fletka narxi',
+                        border: OutlineInputBorder(),
+                        suffixText: "so'm",
+                      ),
+                      validator: (v) {
+                        final d = double.tryParse(v ?? '');
+                        if (d == null || d <= 0)
+                          return 'To\'g\'ri narx kiriting';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: totalController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Umumiy summa',
+                        border: const OutlineInputBorder(),
+                        suffixText: "so'm",
+                        filled: true,
+                        fillColor: Colors.blue.withOpacity(0.1),
+                      ),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // To'lov ma'lumotlari
-                const Text(
-                  'To\'lov ma\'lumotlari',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: paidController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Mijoz bergan pul',
-                    border: OutlineInputBorder(),
-                    suffixText: "so'm",
-                    hintText: '0',
-                  ),
-                  validator: (v) {
-                    final d = double.tryParse(v ?? '0');
-                    if (d == null || d < 0) return 'To\'g\'ri summa kiriting';
+                    // To'lov ma'lumotlari
+                    const Text(
+                      'To\'lov ma\'lumotlari',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: paidController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Mijoz bergan pul',
+                        border: OutlineInputBorder(),
+                        suffixText: "so'm",
+                        hintText: '0',
+                      ),
+                      validator: (v) {
+                        final d = double.tryParse(v ?? '0');
+                        if (d == null || d < 0)
+                          return 'To\'g\'ri summa kiriting';
 
-                    // Check if paid amount is more than total
-                    final count = int.tryParse(trayController.text) ?? 0;
-                    final price = double.tryParse(priceController.text) ?? 0.0;
-                    final total = count * price;
+                        // Check if paid amount is more than total
+                        final count = int.tryParse(trayController.text) ?? 0;
+                        final price =
+                            double.tryParse(priceController.text) ?? 0.0;
+                        final total = count * price;
 
-                    if (d > total && total > 0) {
-                      return 'Bergan pul (${d.toStringAsFixed(0)}) umumiy summadan (${total.toStringAsFixed(0)}) ko\'p bo\'lmasligi kerak';
-                    }
-                    return null;
-                  },
+                        if (d > total && total > 0) {
+                          return 'Bergan pul (${d.toStringAsFixed(0)}) umumiy summadan (${total.toStringAsFixed(0)}) ko\'p bo\'lmasligi kerak';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: remainingController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Qolgan qarz',
+                        border: const OutlineInputBorder(),
+                        suffixText: "so'm",
+                        filled: true,
+                        fillColor: Colors.red.withOpacity(0.1),
+                      ),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: remainingController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    labelText: 'Qolgan qarz',
-                    border: const OutlineInputBorder(),
-                    suffixText: "so'm",
-                    filled: true,
-                    fillColor: Colors.red.withOpacity(0.1),
-                  ),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Bekor qilish'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                final name = nameController.text.trim();
-                final phone = phoneController.text.trim();
-                final address = addressController.text.trim();
-                final count = int.parse(trayController.text);
-                final price = double.parse(priceController.text);
-                final paid = double.tryParse(paidController.text) ?? 0.0;
-                final total = count * price;
-                final remaining = total - paid;
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Bekor qilish'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (isSubmitting) return;
+                  if (formKey.currentState!.validate()) {
+                    isSubmitting = true;
+                    setStateDialog(() {});
+                    final name = nameController.text.trim();
+                    final phone = phoneController.text.trim();
+                    final address = addressController.text.trim();
+                    final count = int.parse(trayController.text);
+                    final price = double.parse(priceController.text);
+                    final paid = double.tryParse(paidController.text) ?? 0.0;
+                    final total = count * price;
+                    final remaining = total - paid;
 
-                final success = await farmProvider.addEggSaleWithCustomer(
-                  customerName: name,
-                  customerPhone: phone,
-                  customerAddress: address,
-                  trayCount: count,
-                  pricePerTray: price,
-                  paidAmount: paid,
-                );
-
-                // Safe navigation check
-                if (context.mounted) {
-                  Navigator.pop(context);
-
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                            '$name ga $count fletka tuxum sotildi.\n'
-                                'Umumiy: ${total.toStringAsFixed(0)} so\'m\n'
-                                'To\'landi: ${paid.toStringAsFixed(0)} so\'m\n'
-                                'Qarz: ${remaining.toStringAsFixed(0)} so\'m'
-                        ),
-                        backgroundColor: Colors.green,
-                        duration: const Duration(seconds: 4),
-                      ),
+                    final success = await farmProvider.addEggSaleWithCustomer(
+                      customerName: name,
+                      customerPhone: phone,
+                      customerAddress: address,
+                      trayCount: count,
+                      pricePerTray: price,
+                      paidAmount: paid,
+                      onSuccess: () {
+                        // Switch to customers tab after successful sale with new customer
+                        MainScreen.switchToCustomersTab();
+                      },
                     );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+
+                    // Safe navigation check
+                    if (context.mounted) {
+                      Navigator.pop(context);
+
+                      if (success) {
+                        // Ensure navigation to Customers tab even if callback timing changes
+                        MainScreen.switchToCustomersTab();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '$name ga $count fletka tuxum sotildi.\n'
+                              'Umumiy: ${total.toStringAsFixed(0)} so\'m\n'
+                              'To\'landi: ${paid.toStringAsFixed(0)} so\'m\n'
+                              'Qarz: ${remaining.toStringAsFixed(0)} so\'m',
+                            ),
+                            backgroundColor: Colors.green,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              farmProvider.error ?? 'Xatolik yuz berdi',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                    isSubmitting = false;
+                    setStateDialog(() {});
                   }
-                }
-              }
-            },
-            child: const Text('Sotish'),
-          ),
-        ],
+                },
+                child: isSubmitting
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Text('Sotish'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1275,7 +1571,9 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Yetarli tuxum yo\'q! Mavjud: $currentStock fletka'),
+                      content: Text(
+                        'Yetarli tuxum yo\'q! Mavjud: $currentStock fletka',
+                      ),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -1291,10 +1589,17 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 if (success) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('$count fletka siniq tuxum kiritildi'),
+                      content: Text(
+                        '$count fletka siniq tuxum muvaffaqiyatli kiritildi',
+                      ),
                       backgroundColor: Colors.orange,
                     ),
                   );
+                  // Return to main dashboard tab after successful insert
+                  try {
+                    // ignore: use_build_context_synchronously
+                    Navigator.of(context).maybePop();
+                  } catch (_) {}
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -1305,9 +1610,7 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text(
               'Kiritish',
               style: TextStyle(color: Colors.white),
@@ -1320,19 +1623,47 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
 
   void _showAddLargeDialog(BuildContext context) {
     final controller = TextEditingController();
+    final farmProvider = Provider.of<FarmProvider>(context, listen: false);
+    final currentStock = farmProvider.farm?.egg?.currentStock ?? 0;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Katta Tuxum Kiritish'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Katta tuxum fletka soni',
-            border: OutlineInputBorder(),
-            suffixText: 'fletka',
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.inventory, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Mavjud zaxira: $currentStock fletka',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Katta tuxum fletka soni',
+                border: OutlineInputBorder(),
+                suffixText: 'fletka',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -1355,14 +1686,18 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('$count fletka katta tuxum kiritildi'),
+                        content: Text(
+                          '$count fletka katta tuxum muvaffaqiyatli kiritildi',
+                        ),
                         backgroundColor: Theme.of(context).colorScheme.tertiary,
                       ),
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(farmProvider.error ?? 'Xatolik yuz berdi'),
+                        content: Text(
+                          farmProvider.error ?? 'Xatolik yuz berdi',
+                        ),
                         backgroundColor: Theme.of(context).colorScheme.error,
                       ),
                     );
@@ -1382,4 +1717,143 @@ class _EggsScreenState extends State<EggsScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+  void _showTodayProductionDetails(egg) {
+    if (egg == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Barcha Statistika'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Bugungi ma'lumotlar
+              const Text(
+                'Bugungi ma\'lumotlar:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildDetailRow(
+                'Bugungi yig\'im:',
+                '${egg.todayProduction ?? 0} fletka',
+              ),
+              _buildDetailRow(
+                'Bugungi sotuv:',
+                '${egg.todaySales ?? 0} fletka',
+              ),
+              _buildDetailRow(
+                'Bugungi siniq:',
+                '${egg.todayBroken ?? 0} fletka',
+              ),
+              _buildDetailRow(
+                'Bugungi katta:',
+                '${egg.todayLarge ?? 0} fletka',
+              ),
+
+              const Divider(),
+
+              // Umumiy ma'lumotlar
+              const Text(
+                'Umumiy statistika:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildDetailRow(
+                'Joriy zaxira:',
+                '${egg.currentStock ?? 0} fletka',
+              ),
+              _buildDetailRow(
+                'Umumiy ishlab chiqarish:',
+                '${egg.productionStats?['totalProduction'] ?? 0} fletka',
+              ),
+              _buildDetailRow(
+                'O\'rtacha kunlik:',
+                '${(egg.productionStats?['averageProduction'] ?? 0.0).toStringAsFixed(1)} fletka',
+              ),
+              if (egg.productionStats?['mostProductionDay'] != null)
+                _buildDetailRow(
+                  'Eng ko\'p yig\'ilgan kun:',
+                  '${egg.productionStats!['mostProductionDay']['count']} fletka',
+                ),
+
+              const Divider(),
+
+              // Sotuvlar statistikasi
+              const Text(
+                'Sotuvlar statistikasi:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildDetailRow(
+                'Umumiy sotuv:',
+                '${egg.sales?.fold(0, (sum, sale) => sum + sale.trayCount) ?? 0} fletka',
+              ),
+
+              const Divider(),
+
+              // Siniq tuxumlar statistikasi
+              const Text(
+                'Siniq tuxumlar:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildDetailRow(
+                'Umumiy siniq:',
+                '${egg.brokenStats?['totalBroken'] ?? 0} fletka',
+              ),
+              if (egg.brokenStats?['mostBrokenDay'] != null)
+                _buildDetailRow(
+                  'Eng ko\'p siniq kun:',
+                  '${egg.brokenStats!['mostBrokenDay']['count']} fletka',
+                ),
+
+              const Divider(),
+
+              // Katta tuxumlar statistikasi
+              const Text(
+                'Katta tuxumlar:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildDetailRow(
+                'Umumiy katta:',
+                '${egg.largeEggStats?['totalLarge'] ?? 0} fletka',
+              ),
+              _buildDetailRow(
+                'O\'rtacha kunlik katta:',
+                '${(egg.largeEggStats?['averageLarge'] ?? 0.0).toStringAsFixed(1)} fletka',
+              ),
+              if (egg.largeEggStats?['mostLargeDay'] != null)
+                _buildDetailRow(
+                  'Eng ko\'p katta kun:',
+                  '${egg.largeEggStats!['mostLargeDay']['count']} fletka',
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Yopish'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _buildDetailRow(String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        Text(value, style: const TextStyle(color: Colors.blue)),
+      ],
+    ),
+  );
 }

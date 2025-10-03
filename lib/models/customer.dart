@@ -53,8 +53,32 @@ class Customer {
        createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
 
-  factory Customer.fromJson(Map<String, dynamic> json) =>
-      _$CustomerFromJson(json);
+  factory Customer.fromJson(Map<String, dynamic> json) {
+    final created = json.containsKey('createdAt')
+        ? json['createdAt']
+        : json['created_at'];
+    final updated = json.containsKey('updatedAt')
+        ? json['updatedAt']
+        : json['updated_at'];
+
+    final dynamic ordersRaw = json['orders'];
+    final List<CustomerOrder> parsedOrders = ordersRaw is List
+        ? ordersRaw
+              .whereType<Map<String, dynamic>>()
+              .map((e) => CustomerOrder.fromJson(e))
+              .toList()
+        : <CustomerOrder>[];
+
+    return Customer(
+      id: (json['id'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      phone: (json['phone'] as String?) ?? '',
+      address: (json['address'] as String?) ?? '',
+      orders: parsedOrders,
+      createdAt: _parseDate(created),
+      updatedAt: _parseDate(updated),
+    );
+  }
 
   Map<String, dynamic> toJson() => _$CustomerToJson(this);
 
@@ -207,8 +231,63 @@ class CustomerOrder {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  factory CustomerOrder.fromJson(Map<String, dynamic> json) =>
-      _$CustomerOrderFromJson(json);
+  factory CustomerOrder.fromJson(Map<String, dynamic> json) {
+    int _readInt(dynamic v, {int fallback = 0}) {
+      if (v == null) return fallback;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v) ?? fallback;
+      return fallback;
+    }
+
+    double _readDouble(dynamic v, {double fallback = 0.0}) {
+      if (v == null) return fallback;
+      if (v is double) return v;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v) ?? fallback;
+      return fallback;
+    }
+
+    bool _readBool(dynamic v, {bool fallback = false}) {
+      if (v == null) return fallback;
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      if (v is String) {
+        final s = v.toLowerCase();
+        if (s == 'true' || s == '1' || s == 'yes') return true;
+        if (s == 'false' || s == '0' || s == 'no') return false;
+      }
+      return fallback;
+    }
+
+    final tray = json.containsKey('trayCount')
+        ? json['trayCount']
+        : json['tray_count'];
+    final price = json.containsKey('pricePerTray')
+        ? json['pricePerTray']
+        : json['price_per_tray'];
+    final delivery = json.containsKey('deliveryDate')
+        ? json['deliveryDate']
+        : json['delivery_date'];
+    final paid = json.containsKey('isPaid') ? json['isPaid'] : json['is_paid'];
+    final paidAt = json.containsKey('paidAt')
+        ? json['paidAt']
+        : json['paid_at'];
+    final created = json.containsKey('createdAt')
+        ? json['createdAt']
+        : json['created_at'];
+
+    return CustomerOrder(
+      id: (json['id'] as String?) ?? UuidGenerator.generateUuid(),
+      trayCount: _readInt(tray),
+      pricePerTray: _readDouble(price),
+      deliveryDate: _parseDate(delivery),
+      isPaid: _readBool(paid),
+      paidAt: paidAt == null ? null : _parseDate(paidAt),
+      note: json['note'] as String?,
+      createdAt: _parseDate(created),
+    );
+  }
 
   Map<String, dynamic> toJson() => _$CustomerOrderToJson(this);
 

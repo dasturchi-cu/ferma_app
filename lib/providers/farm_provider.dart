@@ -1,3 +1,4 @@
+import 'package:ferma_app/screens/main/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,7 +9,7 @@ import '../models/farm.dart';
 import '../models/customer.dart';
 import '../models/chicken.dart';
 import '../models/egg.dart';
-import '../utils/constants.dart';
+import '../screens/main/main_screen.dart';
 import '../services/storage_service.dart';
 import '../config/supabase_config.dart';
 import '../utils/uuid_generator.dart';
@@ -16,6 +17,22 @@ import '../utils/uuid_generator.dart';
 class FarmProvider with ChangeNotifier {
   final SupabaseClient _supabase = SupabaseConfig.client;
   final StorageService _storage = StorageService();
+
+  // Auth-aware Supabase executor: retries once on JWT expiry (PGRST303)
+  Future<T> _executeWithAuthRetry<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on PostgrestException catch (e) {
+      final msg = e.message?.toString() ?? '';
+      if (e.code == 'PGRST303' || msg.contains('JWT expired')) {
+        try {
+          await _supabase.auth.refreshSession();
+        } catch (_) {}
+        return await action();
+      }
+      rethrow;
+    }
+  }
 
   Farm? _farm;
   bool _isLoading = false;
@@ -34,6 +51,10 @@ class FarmProvider with ChangeNotifier {
   Timer? _persistTimer;
   static const Duration _persistDelay = Duration(seconds: 2);
   bool _hasPendingChanges = false;
+
+  // Avoid redundant Supabase writes: keep last synced signatures
+  String? _lastEggSignature;
+  String? _lastCustomersSignature;
 
   // REALTIME UPDATE THROTTLING
   DateTime? _lastRealtimeUpdate;
@@ -79,6 +100,7 @@ class FarmProvider with ChangeNotifier {
     _persistTimer?.cancel();
     _persistTimer = Timer(_persistDelay, () async {
       if (_hasPendingChanges) {
+        _notifyListenersImmediate();
         await _persist();
         _hasPendingChanges = false;
       }
@@ -89,7 +111,18 @@ class FarmProvider with ChangeNotifier {
   Future<void> _persistImmediate() async {
     _persistTimer?.cancel();
     _hasPendingChanges = false;
+    _notifyListenersImmediate();
     await _persist();
+  }
+
+  // Fast path: persist only to local Hive, and return immediately
+  Future<void> _persistLocalImmediate() async {
+    _persistTimer?.cancel();
+    _hasPendingChanges = false;
+    _notifyListenersImmediate();
+    try {
+      await _saveToHive();
+    } catch (_) {}
   }
 
   // Farmni o'rnatish
@@ -116,12 +149,17 @@ class FarmProvider with ChangeNotifier {
 
     // Create Chicken object if null (only once)
     if (chicken == null) {
-      // Preserve existing chicken data from chickenCount if available
-      chicken = Chicken(
-        id: farm.id,
-        totalCount: farm.chickenCount > 0 ? farm.chickenCount : 0,
-        deaths: const [],
-      );
+      // If server didn't send chicken, preserve previous local chicken if exists
+      if (_farm?.chicken != null) {
+        chicken = _farm!.chicken;
+      } else {
+        // Fallback: create new chicken using chickenCount if available
+        chicken = Chicken(
+          id: farm.id,
+          totalCount: farm.chickenCount > 0 ? farm.chickenCount : 0,
+          deaths: [],
+        );
+      }
       needsUpdate = true;
     } else {
       // Sync chickenCount with actual chicken data
@@ -163,12 +201,14 @@ class FarmProvider with ChangeNotifier {
 
     try {
       // Load egg productions with memory-conscious limit
-      final productions = await _supabase
-          .from('egg_productions')
-          .select()
-          .eq('farm_id', farmId)
-          .order('production_date', ascending: false)
-          .limit(30); // Reduced limit to save memory
+      final productions = await _executeWithAuthRetry(() async {
+        return await _supabase
+            .from('egg_productions')
+            .select()
+            .eq('farm_id', farmId)
+            .order('production_date', ascending: false)
+            .limit(30);
+      }); // Reduced limit to save memory
 
       if (productions.isNotEmpty) {
         // MEMORY OPTIMIZATION: Only clear if we have new data
@@ -270,6 +310,78 @@ class FarmProvider with ChangeNotifier {
       print('⚠️ Supabase egg ma\'lumot xatolik: $e');
     } finally {
       _isLoadingEggData = false;
+    }
+  }
+
+  // Load chicken counts and deaths from Supabase if available
+  Future<void> _loadChickenFromSupabase(String farmId) async {
+    try {
+      // 1) Try to read chickens row
+      final rows = await _executeWithAuthRetry(() async {
+        return await _supabase
+            .from('chickens')
+            .select()
+            .eq('farm_id', farmId)
+            .limit(1);
+      });
+
+      Chicken? chicken = _farm?.chicken;
+      if (rows.isNotEmpty) {
+        final row = rows.first;
+        final total =
+            (row['total_count'] as num?)?.toInt() ?? chicken?.totalCount ?? 0;
+        // Build or update chicken object
+        chicken = Chicken(
+          id: farmId,
+          totalCount: total,
+          deaths: chicken?.deaths ?? [],
+        );
+      }
+
+      // 2) Load deaths timeline (optional table)
+      try {
+        final deathsRows = await _executeWithAuthRetry(() async {
+          return await _supabase
+              .from('chicken_deaths')
+              .select()
+              .eq('farm_id', farmId)
+              .order('death_date', ascending: true);
+        });
+
+        if (deathsRows.isNotEmpty) {
+          final List<ChickenDeath> loadedDeaths = deathsRows.map<ChickenDeath>((
+            row,
+          ) {
+            final cnt = (row['death_count'] as num?)?.toInt() ?? 0;
+            final dateStr = row['death_date'] as String?;
+            final date = dateStr != null
+                ? DateTime.parse(dateStr)
+                : DateTime.now();
+            return ChickenDeath(
+              id: row['id'] as String? ?? UuidGenerator.generateUuid(),
+              count: cnt,
+              date: date,
+              note: row['cause'] as String? ?? row['notes'] as String?,
+            );
+          }).toList();
+
+          if (chicken != null) {
+            chicken = chicken.copyWith(deaths: loadedDeaths);
+          }
+        }
+      } catch (_) {
+        // Table may not exist; ignore
+      }
+
+      if (chicken != null) {
+        // Preserve in farm and sync chickenCount
+        _farm = _farm!.copyWith(
+          chicken: chicken,
+          chickenCount: chicken.totalCount,
+        );
+      }
+    } catch (_) {
+      // Ignore; app can run with local chicken data
     }
   }
 
@@ -518,11 +630,13 @@ class FarmProvider with ChangeNotifier {
     if (_farm == null) return;
     try {
       // Internet bor yoki yo'qligini tekshirish
-      final response = await _supabase
-          .from('farms')
-          .select()
-          .eq('id', _farm!.id)
-          .maybeSingle();
+      final response = await _executeWithAuthRetry(() async {
+        return await _supabase
+            .from('farms')
+            .select()
+            .eq('id', _farm!.id)
+            .maybeSingle();
+      });
 
       if (response != null) {
         try {
@@ -537,8 +651,11 @@ class FarmProvider with ChangeNotifier {
           final loadedFarm = Farm.fromJson(sanitizedResponse);
           _farm = _ensureFarmObjectsInitialized(loadedFarm);
 
-          // Load egg productions from Supabase
-          await _loadEggDataFromSupabase(_farm!.id);
+          // Load egg productions from Supabase - authoritative refresh to avoid drift
+          await _reloadEggsAuthoritative(_farm!.id);
+
+          // Load chickens from Supabase (counts and deaths)
+          await _loadChickenFromSupabase(_farm!.id);
 
           // Load customers from Supabase
           await _refreshCustomersFromSupabase();
@@ -563,16 +680,134 @@ class FarmProvider with ChangeNotifier {
     }
   }
 
+  // Authoritative eggs reload used on manual refresh to prevent double counting
+  Future<void> _reloadEggsAuthoritative(String farmId) async {
+    if (_farm == null) return;
+    // Ensure egg object exists
+    if (_farm!.egg == null) {
+      _farm = _farm!.copyWith(egg: Egg(id: farmId));
+    }
+
+    try {
+      final rows = await _executeWithAuthRetry(() async {
+        return await _supabase
+            .from('egg_productions')
+            .select()
+            .eq('farm_id', farmId)
+            .order('production_date', ascending: true)
+            .limit(1000);
+      }); // hard cap to avoid memory blowups
+
+      // Reset lists to avoid duplicates
+      _farm!.egg!.production.clear();
+      _farm!.egg!.sales.clear();
+      _farm!.egg!.brokenEggs.clear();
+      _farm!.egg!.largeEggs.clear();
+
+      for (final record in rows) {
+        final type = record['record_type'] as String? ?? 'production';
+        final trayCount = (record['tray_count'] as num?)?.toInt() ?? 0;
+        if (trayCount <= 0) continue;
+        final pricePerTray =
+            (record['price_per_tray'] as num?)?.toDouble() ?? 0.0;
+        final id = record['id'] as String? ?? UuidGenerator.generateUuid();
+        final dateStr =
+            record['production_date'] as String? ??
+            record['created_at'] as String?;
+        DateTime date;
+        try {
+          date = dateStr != null ? DateTime.parse(dateStr) : DateTime.now();
+        } catch (_) {
+          date = DateTime.now();
+        }
+        switch (type) {
+          case 'production':
+            _farm!.egg!.production.add(
+              EggProduction(
+                id: id,
+                trayCount: trayCount,
+                date: date,
+                note: record['note'] as String?,
+              ),
+            );
+            break;
+          case 'sale':
+            _farm!.egg!.sales.add(
+              EggSale(
+                id: id,
+                trayCount: trayCount,
+                pricePerTray: pricePerTray,
+                date: date,
+                note: record['note'] as String?,
+              ),
+            );
+            break;
+          case 'broken':
+            _farm!.egg!.brokenEggs.add(
+              BrokenEgg(
+                id: id,
+                trayCount: trayCount,
+                date: date,
+                note: record['note'] as String?,
+              ),
+            );
+            break;
+          case 'large':
+            _farm!.egg!.largeEggs.add(
+              LargeEgg(
+                id: id,
+                trayCount: trayCount,
+                date: date,
+                note: record['note'] as String?,
+              ),
+            );
+            break;
+          default:
+            _farm!.egg!.production.add(
+              EggProduction(
+                id: id,
+                trayCount: trayCount,
+                date: date,
+                note: record['note'] as String?,
+              ),
+            );
+        }
+      }
+
+      // Deduplicate by ID to be safe
+      _farm!.egg!.production
+        ..clear()
+        ..addAll({for (final p in _farm!.egg!.production) p.id: p}.values);
+      _farm!.egg!.sales
+        ..clear()
+        ..addAll({for (final s in _farm!.egg!.sales) s.id: s}.values);
+      _farm!.egg!.brokenEggs
+        ..clear()
+        ..addAll({for (final b in _farm!.egg!.brokenEggs) b.id: b}.values);
+      _farm!.egg!.largeEggs
+        ..clear()
+        ..addAll({for (final l in _farm!.egg!.largeEggs) l.id: l}.values);
+
+      _pendingLocalProductionIds.clear();
+    } catch (e) {
+      print('⚠️ _reloadEggsAuthoritative xatolik: $e');
+      // Fallback to incremental loader
+      await _loadEggDataFromSupabase(farmId);
+    }
+  }
+
   // Refresh customers from Supabase separately
   Future<void> _refreshCustomersFromSupabase() async {
     if (_farm == null) return;
 
     try {
-      // Load customers
-      final customersData = await _supabase
-          .from('customers')
-          .select('*')
-          .eq('farm_id', _farm!.id);
+      // Load customers with nested orders to preserve debts
+      final customersData = await _executeWithAuthRetry(() async {
+        return await _supabase
+            .from('customers')
+            .select('*, orders(*)')
+            .eq('farm_id', _farm!.id);
+      });
 
       if (customersData.isNotEmpty) {
         print('📥 Loading ${customersData.length} customers from Supabase');
@@ -589,7 +824,7 @@ class FarmProvider with ChangeNotifier {
           }
         }
 
-        // Replace the entire customers list atomically
+        // Replace the entire customers list atomically (includes debts)
         _farm!.customers.clear();
         _farm!.customers.addAll(newCustomers);
 
@@ -813,9 +1048,7 @@ class FarmProvider with ChangeNotifier {
           }
         }
 
-        print(
-          '🔄 Realtime: egg lists updated from server. Stock: ${_farm!.egg!.currentStock}',
-        );
+        // Reduced verbose logging to keep UI snappy
       }
     } catch (e) {
       print('❌ _processEggRecords da umumiy xatolik: $e');
@@ -826,35 +1059,94 @@ class FarmProvider with ChangeNotifier {
   // Farm actions
   // -----------------------------
   Future<bool> addChickens(int count) async {
-    if (_farm == null) return false;
+    if (_farm == null) {
+      _error = 'Ferma ma\'lumotlari topilmadi';
+      return false;
+    }
+
+    if (count <= 0) {
+      _error = 'Tovuqlar soni 0 dan katta bo\'lishi kerak';
+      return false;
+    }
+
     try {
+      print('🐔 Tovuqlar qo\'shilmoqda: $count dona');
+
+      // Get counts before adding
+      final beforeCount = _farm!.chicken?.currentCount ?? 0;
+      final beforeTotal = _farm!.chickenCount;
+
+      // Add chickens to farm
       _farm!.addChickens(count);
 
-      // Immediate UI update
-      notifyListeners();
+      // Verify addition
+      final afterCount = _farm!.chicken?.currentCount ?? 0;
+      final afterTotal = _farm!.chickenCount;
+
+      print('📊 Tovuqlar statistikasi:');
+      print('  Avval: $beforeCount ($beforeTotal total)');
+      print('  Keyin: $afterCount ($afterTotal total)');
+
+      // Force immediate UI update
+      _notifyListenersImmediate();
 
       await _addActivityLog(
         'Tovuqlar qo\'shildi',
-        '$count dona tovuq ferma ga qo\'shildi. Jami: ${_farm!.chicken?.currentCount ?? 0}',
+        '$count dona tovuq qo\'shildi. Jami: $afterCount dona',
+        activityType: 'chickenAdded',
+        importance: 'high',
       );
-      _persistDebounced(); // Use debounced persist
+
+      // Use immediate persist for critical data
+      await _persistImmediate();
+
+      // Save snapshot to Supabase chickens table if available
+      try {
+        await _supabase.from('chickens').upsert({
+          'farm_id': _farm!.id,
+          'total_count': _farm!.chicken?.totalCount ?? _farm!.chickenCount,
+          'current_count': _farm!.chicken?.currentCount ?? _farm!.chickenCount,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      } catch (_) {}
+
+      print('✅ Tovuqlar muvaffaqiyatli qo\'shildi');
       return true;
     } catch (e) {
+      print('❌ Tovuqlar qo\'shishda xatolik: $e');
       _error = 'Tovuqlar qo\'shishda xatolik: $e';
       await _addActivityLog('Xatolik', 'Tovuq qo\'shishda xatolik: $e');
+      notifyListeners();
       return false;
     }
   }
 
-  Future<bool> addChickenDeath(int count) async {
+  Future<bool> addChickenDeath(int count, {String? note}) async {
     if (_farm == null) return false;
     try {
-      _farm!.addChickenDeath(count);
+      _farm!.addChickenDeath(count, note: note);
       await _addActivityLog(
         'Tovuq o\'limi',
-        '$count dona tovuq o\'ldi. Qolgan: ${_farm!.chicken?.currentCount ?? 0}',
+        '$count dona tovuq o\'ldi. Qolgan: ${_farm!.chicken?.currentCount ?? 0}${note != null && note.isNotEmpty ? '. Izoh: ' + note : ''}',
       );
       await _persist();
+
+      // Persist death to Supabase if table exists
+      try {
+        await _supabase.from('chicken_deaths').insert({
+          'farm_id': _farm!.id,
+          'death_count': count,
+          'death_date': DateTime.now().toIso8601String(),
+          'notes': note,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        await _supabase.from('chickens').upsert({
+          'farm_id': _farm!.id,
+          'total_count': _farm!.chicken?.totalCount ?? _farm!.chickenCount,
+          'current_count': _farm!.chicken?.currentCount ?? _farm!.chickenCount,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      } catch (_) {}
       return true;
     } catch (e) {
       _error = 'Tovuq o\'limini qo\'shishda xatolik: $e';
@@ -928,8 +1220,9 @@ class FarmProvider with ChangeNotifier {
         '$trays fletka tuxum ishlab chiqarildi. Jami zaxira: $currentStock fletka${note != null ? '. Izoh: $note' : ''}',
       );
 
-      // Use immediate persist for critical egg data
-      await _persistImmediate();
+      // FAST: local persist first for instant UI, then background sync
+      await _persistLocalImmediate();
+      unawaited(_saveToSupabase());
 
       return true;
     } catch (e) {
@@ -1025,7 +1318,8 @@ class FarmProvider with ChangeNotifier {
 
     try {
       _farm!.addBrokenEgg(trays, note: note);
-      await _persist();
+      _notifyListenersImmediate();
+      await _persistImmediate();
       return true;
     } catch (e) {
       _error = 'Siniq tuxum qo\'shishda xatolik: $e';
@@ -1037,7 +1331,8 @@ class FarmProvider with ChangeNotifier {
     if (_farm == null) return false;
     try {
       _farm!.addLargeEgg(trays, note: note);
-      await _persist();
+      _notifyListenersImmediate();
+      await _persistImmediate();
       return true;
     } catch (e) {
       _error = 'Katta tuxum qo‘shishda xatolik: $e';
@@ -1059,15 +1354,19 @@ class FarmProvider with ChangeNotifier {
       print('📝 addCustomer: Boshlandi - $name | $phone | $address');
 
       // Check for duplicate customers
+      // Rule: If phone is provided, treat as duplicate ONLY when BOTH name and phone match.
+      // This allows multiple customers with same phone but different names.
       final normalizedPhone = phone?.replaceAll(RegExp(r'\s+'), '') ?? '';
+      final normalizedName = name.trim().toLowerCase();
       final existingCustomer = _farm!.customers
           .where((c) => !c.name.startsWith('QARZ:'))
           .where((c) {
+            final sameName = c.name.trim().toLowerCase() == normalizedName;
             if (normalizedPhone.isNotEmpty) {
               final customerPhone = c.phone.replaceAll(RegExp(r'\s+'), '');
-              return customerPhone == normalizedPhone;
+              return sameName && customerPhone == normalizedPhone;
             }
-            return c.name.trim().toLowerCase() == name.trim().toLowerCase();
+            return sameName;
           })
           .firstOrNull;
 
@@ -1133,11 +1432,47 @@ class FarmProvider with ChangeNotifier {
     }
   }
 
+  // Create customer and return its ID immediately (no duplicate update logic)
+  Future<String?> _addCustomerAndGetId(
+    String name, {
+    String? phone,
+    String? address,
+  }) async {
+    if (_farm == null) return null;
+    try {
+      _farm!.addCustomer(name, phone: phone, address: address);
+      _notifyListenersImmediate();
+      await _persistImmediate();
+      return _farm!.customers.last.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> removeCustomer(String customerId) async {
     if (_farm == null) return false;
     try {
+      // First remove from Supabase so realtime won't re-create it locally
+      if (!_isOfflineMode) {
+        try {
+          await _supabase.from('orders').delete().eq('customer_id', customerId);
+          await _supabase.from('customers').delete().eq('id', customerId);
+        } catch (e) {
+          print('⚠️ Supabase delete failed for customer $customerId: $e');
+        }
+      }
+
       _farm!.removeCustomer(customerId);
       await _persist();
+      _notifyListenersImmediate();
+
+      // Log activity for traceability
+      await _addActivityLog(
+        'Mijoz o\'chirildi',
+        'Mijoz ID: $customerId o\'chirildi va Supabase dan ham tozalandi',
+        activityType: 'customer',
+        importance: 'high',
+      );
       return true;
     } catch (e) {
       _error = 'Mijozni o‘chirishda xatolik: $e';
@@ -1283,6 +1618,15 @@ class FarmProvider with ChangeNotifier {
       // Remove the order
       _farm!.removeCustomerOrder(customerId, orderId);
 
+      // Also delete from Supabase to avoid it being re-sent via realtime
+      if (!_isOfflineMode) {
+        try {
+          await _supabase.from('orders').delete().eq('id', orderId);
+        } catch (e) {
+          print('⚠️ Supabase delete failed for order $orderId: $e');
+        }
+      }
+
       // Persist changes
       await _persist();
 
@@ -1300,6 +1644,67 @@ class FarmProvider with ChangeNotifier {
       return true;
     } catch (e) {
       _error = 'Buyurtmani o\'chirishda xatolik: $e';
+      return false;
+    }
+  }
+
+  // Qisman to'lov: buyurtma uchun ma'lum miqdorni qabul qilish
+  Future<bool> payCustomerOrderAmount(
+    String customerId,
+    String orderId,
+    double amount,
+  ) async {
+    if (_farm == null) {
+      _error = 'Fermer xo\'jaligi topilmadi';
+      return false;
+    }
+    if (amount <= 0) {
+      _error = 'To\'lov summasi noto\'g\'ri';
+      return false;
+    }
+
+    try {
+      final customer = _farm!.findCustomer(customerId);
+      if (customer == null) {
+        _error = 'Mijoz topilmadi';
+        return false;
+      }
+      final order = customer.orders.firstWhere(
+        (o) => o.id == orderId,
+        orElse: () => throw Exception('Buyurtma topilmadi'),
+      );
+
+      final total = order.totalAmount;
+
+      if (amount >= total) {
+        // To'liq yoki ortiqcha to'lov: buyurtmani to'langan deb belgilash
+        _farm!.markCustomerOrderAsPaid(customerId, orderId);
+      } else {
+        // Qisman to'lov: manfiy "payment" yozuvi qo'shish
+        _farm!.addCustomerOrder(
+          customerId,
+          1,
+          -amount, // manfiy summa qarzni kamaytiradi
+          DateTime.now(),
+          note: 'PAYMENT for $orderId',
+          deductFromStock: false,
+        );
+      }
+
+      _notifyListenersImmediate();
+      await _persistImmediate();
+
+      // Activity log
+      await _addActivityLog(
+        'To\'lov',
+        '${customer.name} uchun ${amount.toStringAsFixed(0)} so\'m to\'lov qabul qilindi',
+        activityType: 'payment',
+        importance: 'high',
+      );
+
+      return true;
+    } catch (e) {
+      _error = 'To\'lovni qabul qilishda xatolik: $e';
       return false;
     }
   }
@@ -1332,7 +1737,17 @@ class FarmProvider with ChangeNotifier {
     double pricePerTray, {
     String? note,
   }) async {
-    if (_farm == null) return false;
+    if (_farm == null) {
+      _error = 'Ferma ma\'lumotlari topilmadi';
+      return false;
+    }
+
+    // Check if customer exists
+    final customer = _farm!.findCustomer(customerId);
+    if (customer == null) {
+      _error = 'Mijoz topilmadi';
+      return false;
+    }
 
     // Check if enough stock is available
     final currentStock = _farm!.egg?.currentStock ?? 0;
@@ -1342,12 +1757,14 @@ class FarmProvider with ChangeNotifier {
     }
 
     try {
-      // Reduce egg stock
+      print('🐔 Mijozga tuxum sotish: ${customer.name} ga $trays fletka');
+
+      // First reduce egg stock
       _farm!.addEggSale(trays, pricePerTray, note: note ?? 'Mijozga sotildi');
 
       // Add as unpaid order (debt) to customer
       final deliveryDate = DateTime.now();
-      _farm!.addCustomerOrder(
+      final success = _farm!.addCustomerOrder(
         customerId,
         trays,
         pricePerTray,
@@ -1355,9 +1772,32 @@ class FarmProvider with ChangeNotifier {
         note: note ?? 'Tuxum sotildi - qarz',
       );
 
-      await _persist();
+      if (!success) {
+        _error = 'Mijozga buyurtma qo\'shishda xatolik';
+        return false;
+      }
+
+      // Add activity log
+      await _addActivityLog(
+        'Tuxum sotildi',
+        '${customer.name} ga $trays fletka tuxum sotildi. Qarz: ${(trays * pricePerTray).toStringAsFixed(0)} so\'m',
+        activityType: 'eggSale',
+        importance: 'high',
+      );
+
+      // Force immediate UI update and persist
+      _notifyListenersImmediate();
+      await _persistImmediate();
+      // Reload customers to ensure dialogs see fresh orders
+      try {
+        await _refreshCustomersFromSupabase();
+        _notifyListenersImmediate();
+      } catch (_) {}
+
+      print('✅ Mijozga tuxum sotish muvaffaqiyatli yakunlandi');
       return true;
     } catch (e) {
+      print('❌ Mijozga tuxum sotishda xatolik: $e');
       _error = 'Mijozga tuxum sotishda xatolik: $e';
       return false;
     }
@@ -1376,7 +1816,7 @@ class FarmProvider with ChangeNotifier {
       // Create a SEPARATE debt record (not in regular customers list)
       // This debt will ONLY show in Debts screen, not in Customers screen
 
-      // Check if this person already has a debt record
+      // Check if this person already has a debt-only record (QARZ:)
       String? existingDebtorId;
       final existingDebtor = _farm!.customers
           .where(
@@ -1388,31 +1828,55 @@ class FarmProvider with ChangeNotifier {
           .firstOrNull;
 
       if (existingDebtor != null) {
-        // Update existing debt record
+        // Update existing debt-only customer
         existingDebtorId = existingDebtor.id;
       } else {
-        // Create new debt-only customer (marked with QARZ: prefix)
+        // Create debt-only customer (separate from regular customers)
         _farm!.addCustomer(
-          'QARZ: $customerName', // Special prefix to identify debt-only customers
+          'QARZ: $customerName', // mark as debt-only
           phone: customerPhone,
           address: customerAddress.isNotEmpty ? customerAddress : null,
         );
         existingDebtorId = _farm!.customers.last.id;
       }
 
-      // Add debt as unpaid order
+      // Add debt as unpaid order (stable ID so it persists correctly)
       final deliveryDate = DateTime.now();
-      _farm!.addCustomerOrder(
+      final added = _farm!.addCustomerOrder(
         existingDebtorId,
         1, // 1 tray to ensure totalAmount calculation works
         debtAmount, // price per tray = total debt amount
         deliveryDate,
         note:
             'MANUAL_DEBT: ${note.isNotEmpty ? note : "Qo'lda qo'shilgan qarz"}',
+        deductFromStock: false,
+      );
+      if (!added) {
+        _error = 'Qarz yozuvini qo\'shib bo\'lmadi';
+        return false;
+      }
+
+      // Debug: Check the customer after adding debt
+      final customer = _farm!.customers.firstWhere(
+        (c) => c.id == existingDebtorId,
+      );
+      print(
+        '🔍 Qarz qo\'shilgandan keyin mijoz: ${customer.name}, qarz: ${customer.totalDebt}',
       );
 
-      await _persist();
-      notifyListeners();
+      await _persistImmediate();
+      try {
+        await _refreshCustomersFromSupabase();
+      } catch (_) {}
+
+      // Force UI update multiple times to ensure it refreshes
+      _notifyListenersImmediate();
+      await Future.delayed(const Duration(milliseconds: 100));
+      _notifyListenersImmediate();
+      await Future.delayed(const Duration(milliseconds: 100));
+      _notifyListenersImmediate();
+
+      print('🔄 UI yangilandi. Mijozlar soni: ${_farm!.customers.length}');
       return true;
     } catch (e) {
       _error = 'Qarz qo\'shishda xatolik: $e';
@@ -1424,12 +1888,17 @@ class FarmProvider with ChangeNotifier {
   // Get only regular customers (not debt-only ones)
   List<Customer> getRegularCustomers() {
     if (_farm == null) return [];
+    // Show ONLY normal customers. Exclude all debt-only (QARZ:) entries
     final regularCustomers = _farm!.customers
         .where((c) => !c.name.startsWith('QARZ:'))
         .toList();
-    print(
-      '📊 getRegularCustomers(): ${regularCustomers.length} ta regular mijoz',
-    );
+    // Only log once every 5 seconds to prevent spam
+    final now = DateTime.now();
+    if (_lastCustomerUpdate == null ||
+        now.difference(_lastCustomerUpdate!).inSeconds > 5) {
+      print('📊 Regular mijozlar: ${regularCustomers.length} ta');
+      _lastCustomerUpdate = now;
+    }
     return regularCustomers;
   }
 
@@ -1448,6 +1917,7 @@ class FarmProvider with ChangeNotifier {
     required int trayCount,
     required double pricePerTray,
     required double paidAmount,
+    Function()? onSuccess,
   }) async {
     if (_farm == null) return false;
 
@@ -1614,6 +2084,7 @@ class FarmProvider with ChangeNotifier {
         deliveryDate,
         note:
             'Tuxum sotildi. To\'landi: ${paidAmount.toStringAsFixed(0)} so\'m',
+        deductFromStock: false, // Stock already deducted by addEggSale above
       );
 
       // If fully paid, mark as paid immediately
@@ -1624,6 +2095,49 @@ class FarmProvider with ChangeNotifier {
         print('💰 To\'langan buyurtma belgilandi');
       } else {
         print('💳 Qarz qoldi: ${remainingDebt.toStringAsFixed(0)} so\'m');
+
+        // Mirror remaining debt into a dedicated Debts customer (QARZ: prefix)
+        String debtorId;
+        final normalizedPhone = customerPhone.replaceAll(RegExp(r'\s+'), '');
+        final existingDebtor = _farm!.customers
+            .where((c) => c.name.startsWith('QARZ:'))
+            .where((c) {
+              if (normalizedPhone.isNotEmpty) {
+                return c.phone.replaceAll(RegExp(r'\s+'), '') ==
+                    normalizedPhone;
+              }
+              return c.name.trim().toLowerCase() ==
+                  'qarz: ' + customerName.trim().toLowerCase();
+            })
+            .firstOrNull;
+
+        if (existingDebtor != null) {
+          debtorId = existingDebtor.id;
+        } else {
+          // Create debt-only customer and get ID
+          final newId = await _addCustomerAndGetId(
+            'QARZ: $customerName',
+            phone: customerPhone,
+            address: customerAddress,
+          );
+          if (newId == null) {
+            _error = 'Qarz mijoz yaratib bo\'lmadi';
+            notifyListeners();
+            return false;
+          }
+          debtorId = newId;
+        }
+
+        // Add debt as a single-item order, price = remainingDebt
+        _farm!.addCustomerOrder(
+          debtorId,
+          1,
+          remainingDebt,
+          DateTime.now(),
+          note:
+              'DEBT_FROM_SALE: $trayCount fletka x ${pricePerTray.toStringAsFixed(0)} so\'m',
+          deductFromStock: false,
+        );
       }
 
       // IMPORTANT: Force immediate UI update
@@ -1636,10 +2150,26 @@ class FarmProvider with ChangeNotifier {
         '$trayCount fletka tuxum $customerName ga sotildi. ${totalAmount.toStringAsFixed(0)} so\'m. To\'langan: ${paidAmount.toStringAsFixed(0)} so\'m. Zaxira: $stockAfter fletka',
       );
 
-      // Save changes with immediate persist to ensure data consistency
-      await _persistImmediate();
+      // FAST: local persist first for instant UI, then background sync
+      await _persistLocalImmediate();
+      unawaited(_saveToSupabase());
+      // Avoid heavy immediate reload which causes UI lag/flicker; local state is already correct
+      _notifyListenersImmediate();
 
       print('✅ Mijozga sotish muvaffaqiyatli yakunlandi');
+
+      // Call success callback if provided
+      if (onSuccess != null) {
+        onSuccess();
+      }
+
+      // Navigate to Debts tab immediately if there is remaining debt
+      if (remainingDebt > 0) {
+        try {
+          MainScreen.switchToDebtsTab();
+        } catch (_) {}
+      }
+
       return true;
     } catch (e) {
       print('❌ Mijozga sotishda xatolik: $e');
@@ -1744,11 +2274,48 @@ class FarmProvider with ChangeNotifier {
         // THREAD-SAFE: Create copies of lists to avoid concurrent modification
         List<EggProduction> productionsCopy = [];
         List<EggSale> salesCopy = [];
+        List<BrokenEgg> brokenCopy = [];
+        List<LargeEgg> largeCopy = [];
 
         if (_farm!.egg != null) {
           // Create defensive copies to prevent concurrent modification
           productionsCopy = List<EggProduction>.from(_farm!.egg!.production);
           salesCopy = List<EggSale>.from(_farm!.egg!.sales);
+          brokenCopy = List<BrokenEgg>.from(_farm!.egg!.brokenEggs);
+          largeCopy = List<LargeEgg>.from(_farm!.egg!.largeEggs);
+
+          // Build lightweight signature to avoid redundant writes
+          final prodIds = productionsCopy.map((e) => e.id).toList()..sort();
+          final saleIds = salesCopy.map((e) => e.id).toList()..sort();
+          final brokenIds = brokenCopy.map((e) => e.id).toList()..sort();
+          final largeIds = largeCopy.map((e) => e.id).toList()..sort();
+          final currentEggSignature = [
+            prodIds.join(','),
+            saleIds.join(','),
+            brokenIds.join(','),
+            largeIds.join(','),
+          ].join('|');
+          if (_lastEggSignature == currentEggSignature) {
+            productionsCopy = [];
+            salesCopy = [];
+            brokenCopy = [];
+            largeCopy = [];
+          } else {
+            _lastEggSignature = currentEggSignature;
+            // Local dedupe by ID to prevent duplicates being saved
+            productionsCopy = List<EggProduction>.from(
+              {for (final p in productionsCopy) p.id: p}.values,
+            );
+            salesCopy = List<EggSale>.from(
+              {for (final s in salesCopy) s.id: s}.values,
+            );
+            brokenCopy = List<BrokenEgg>.from(
+              {for (final b in brokenCopy) b.id: b}.values,
+            );
+            largeCopy = List<LargeEgg>.from(
+              {for (final l in largeCopy) l.id: l}.values,
+            );
+          }
         }
 
         // Egg productions ni saqlash (copy dan) - STABLE IDs
@@ -1802,16 +2369,39 @@ class FarmProvider with ChangeNotifier {
           // Silent save
         }
 
-        // Customers ni saqlash - IMPROVED with better error handling
+        // Customers ni saqlash - with signature + local dedupe
         if (_farm!.customers.isNotEmpty) {
           print(
             '💾 Saving ${_farm!.customers.length} customers to Supabase...',
           );
 
           // Create a copy of the customers list to avoid concurrent modification
-          final customersCopy = List<Customer>.from(_farm!.customers);
+          List<Customer> customersCopy = List<Customer>.from(_farm!.customers);
+
+          // Skip if unchanged since last sync
+          final ids = customersCopy.map((c) => c.id).toList()..sort();
+          final orderIds =
+              customersCopy.expand((c) => c.orders.map((o) => o.id)).toList()
+                ..sort();
+          final currentCustomersSignature =
+              ids.join(',') + '|' + orderIds.join(',');
+          if (_lastCustomersSignature == currentCustomersSignature) {
+            customersCopy = [];
+          } else {
+            _lastCustomersSignature = currentCustomersSignature;
+            // Local dedupe by ID
+            customersCopy = List<Customer>.from(
+              {for (final c in customersCopy) c.id: c}.values,
+            );
+          }
 
           for (final customer in customersCopy) {
+            // Sanity: ensure each customer has a stable UUID
+            if (customer.id.isEmpty) {
+              // Skip invalid customer without id to avoid overwriting
+              print('⚠️ Skipping customer without id to prevent overwrite');
+              continue;
+            }
             try {
               final customerData = {
                 'id': customer.id,
@@ -1830,7 +2420,9 @@ class FarmProvider with ChangeNotifier {
               // Orders ni saqlash
               if (customer.orders.isNotEmpty) {
                 // Also copy orders list to avoid concurrent modification
-                final ordersCopy = List.from(customer.orders);
+                final ordersCopy = List.from(
+                  {for (final o in customer.orders) o.id: o}.values,
+                );
                 for (final order in ordersCopy) {
                   try {
                     // Safe null check for dates

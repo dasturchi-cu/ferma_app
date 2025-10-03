@@ -114,12 +114,13 @@ class Chicken {
   }
 
   // O'lim qo'shish
-  void addDeath(int count) {
+  void addDeath(int count, {String? note}) {
     deaths.add(
       ChickenDeath(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         count: count,
         date: DateTime.now(),
+        note: note,
       ),
     );
     updatedAt = DateTime.now();

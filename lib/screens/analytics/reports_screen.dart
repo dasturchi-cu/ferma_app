@@ -248,6 +248,11 @@ class _ReportsScreenState extends State<ReportsScreen>
               const SizedBox(height: 16),
 
               _buildRevenueChart(),
+
+              const SizedBox(height: 24),
+
+              // Lifetime and daily drilldown
+              _buildDailyReportsSection(farm.egg!),
             ],
           ),
         );
@@ -290,20 +295,24 @@ class _ReportsScreenState extends State<ReportsScreen>
                     color: AppTheme.success,
                   ),
                   StatCard(
-                    title: 'Jami Xarajat',
-                    value: '0 som', // TODO: Add expenses tracking
+                    title: 'Oylik Daromad',
+                    value:
+                        '${_getMonthlyRevenue(farm.egg, _selectedMonth, _selectedYear).toStringAsFixed(0)} som',
                     icon: Icons.trending_down,
-                    color: AppTheme.error,
-                  ),
-                  StatCard(
-                    title: 'Sof Foyda',
-                    value: '${_getTotalRevenue(farm.egg)} som',
-                    icon: Icons.attach_money,
                     color: AppTheme.info,
                   ),
                   StatCard(
+                    title: 'Sof Foyda',
+                    value: '${_getNetProfit(farm.egg).toStringAsFixed(0)} som',
+                    icon: Icons.attach_money,
+                    color: _getNetProfit(farm.egg) > 0
+                        ? AppTheme.success
+                        : AppTheme.error,
+                  ),
+                  StatCard(
                     title: 'O\'rtacha Kun Daromadi',
-                    value: '${_getAverageDailyRevenue(farm.egg)} som',
+                    value:
+                        '${_getAverageDailyRevenue(farm.egg).toStringAsFixed(0)} som',
                     icon: Icons.calendar_today,
                     color: AppTheme.accentColor,
                   ),
@@ -1108,6 +1117,33 @@ class _ReportsScreenState extends State<ReportsScreen>
     return days > 0 ? totalRevenue / days : totalRevenue;
   }
 
+  // Get monthly revenue
+  double _getMonthlyRevenue(Egg? egg, int month, int year) {
+    if (egg == null) return 0;
+
+    double monthlyRevenue = 0;
+    for (final sale in egg.sales) {
+      if (sale.date.month == month && sale.date.year == year) {
+        monthlyRevenue += sale.trayCount * sale.pricePerTray;
+      }
+    }
+    return monthlyRevenue;
+  }
+
+  // Removed unused _getMonthlyProduction
+
+  // Calculate net profit (revenue minus estimated costs)
+  double _getNetProfit(Egg? egg) {
+    if (egg == null) return 0;
+
+    final totalRevenue = _getTotalRevenue(egg);
+    // Estimate basic costs (simplified)
+    final estimatedCosts =
+        _getTotalEggProduction(egg) * 8000; // 8000 som per tray cost estimate
+
+    return totalRevenue - estimatedCosts;
+  }
+
   int _getDebtorCustomers(List customers) {
     return customers.where((customer) => customer.totalDebt > 0).length;
   }
@@ -1144,19 +1180,21 @@ class _ReportsScreenState extends State<ReportsScreen>
     return {'spots': spots, 'maxY': maxY};
   }
 
-  // Get daily egg count (simplified implementation)
+  // Get daily egg count from actual production data
   int _getDailyEggCount(Egg egg, DateTime date) {
-    // This is a simplified version - in reality you'd have daily records
-    // For now, we'll use a combination of production and sales data
-    final productionCount = egg.production.length;
-    final salesCount = egg.sales.length;
+    int dailyCount = 0;
 
-    // Generate some realistic variation based on the data
-    final baseCount = (productionCount + salesCount) * 2;
-    final variation = (date.day % 3) * 5; // Some daily variation
+    // Calculate production on this specific date
+    for (final production in egg.production) {
+      final productionDate = production.date;
+      if (productionDate.year == date.year &&
+          productionDate.month == date.month &&
+          productionDate.day == date.day) {
+        dailyCount += production.trayCount;
+      }
+    }
 
-    // Ensure we have at least some data for the chart
-    return (baseCount + variation).clamp(1, 50);
+    return dailyCount;
   }
 
   // Generate revenue chart data
@@ -1179,21 +1217,21 @@ class _ReportsScreenState extends State<ReportsScreen>
     return {'spots': spots, 'maxY': maxY};
   }
 
-  // Get daily revenue (simplified implementation)
+  // Get daily revenue from actual sales data
   double _getDailyRevenue(Egg egg, DateTime date) {
-    // Calculate revenue from sales
-    double totalRevenue = 0;
+    double dailyRevenue = 0;
+
+    // Calculate revenue from sales on this specific date
     for (final sale in egg.sales) {
-      totalRevenue += sale.trayCount * sale.pricePerTray;
+      final saleDate = sale.date;
+      if (saleDate.year == date.year &&
+          saleDate.month == date.month &&
+          saleDate.day == date.day) {
+        dailyRevenue += sale.trayCount * sale.pricePerTray;
+      }
     }
 
-    // Add some daily variation
-    final variation = (date.day % 4) * 1000;
-    final dailyRevenue =
-        (totalRevenue / 7) + variation; // Distribute weekly revenue across days
-
-    // Ensure we have at least some revenue for the chart
-    return dailyRevenue.clamp(1000.0, 100000.0);
+    return dailyRevenue;
   }
 
   // Generate customer debt data for pie chart
@@ -1283,5 +1321,193 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
 
     return {'sections': sections, 'legend': legend};
+  }
+}
+
+// =========================
+// Daily reports (lifetime + per-day details)
+// =========================
+extension _DailyReports on _ReportsScreenState {
+  Widget _buildDailyReportsSection(Egg egg) {
+    final lifetime = _lifetimeAggregates(egg);
+    final dailyList = _buildPerDayAggregates(egg);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Kunlik hisobotlar',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+
+        // Lifetime aggregate card
+        Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.all_inclusive),
+            title: const Text('Umrbod umumiy xulosa'),
+            subtitle: Text(
+              'Yig\'ilgan: ${lifetime['production']} | Sotilgan: ${lifetime['sales']} | Siniq: ${lifetime['broken']} | Katta: ${lifetime['large']} | Daromad: ${lifetime['revenue'].toStringAsFixed(0)} som',
+            ),
+            onTap: () {
+              _showDailyDetailDialog(
+                title: 'Umrbod umumiy xulosa',
+                details: lifetime,
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Per-day list (reverse chronological)
+        ListView.separated(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: dailyList.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final entry = dailyList[index];
+            final date = entry['date'] as DateTime;
+            final d = _formatDate(date);
+            final p = entry['production'] as int;
+            final s = entry['sales'] as int;
+            final b = entry['broken'] as int;
+            final l = entry['large'] as int;
+            final r = entry['revenue'] as double;
+
+            return Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.calendar_today),
+                title: Text(d),
+                subtitle: Text(
+                  'Yig\'ilgan: $p | Sotilgan: $s | Siniq: $b | Katta: $l | Daromad: ${r.toStringAsFixed(0)} som',
+                ),
+                onTap: () {
+                  _showDailyDetailDialog(
+                    title: 'Kunlik hisobot ($d)',
+                    details: entry,
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Map<String, dynamic> _lifetimeAggregates(Egg egg) {
+    final totalProduction = egg.production.fold<int>(
+      0,
+      (s, p) => s + p.trayCount,
+    );
+    final totalSales = egg.sales.fold<int>(0, (s, p) => s + p.trayCount);
+    final totalBroken = egg.brokenEggs.fold<int>(0, (s, p) => s + p.trayCount);
+    final totalLarge = egg.largeEggs.fold<int>(0, (s, p) => s + p.trayCount);
+    final totalRevenue = egg.sales.fold<double>(
+      0.0,
+      (s, p) => s + (p.trayCount * p.pricePerTray),
+    );
+
+    return {
+      'production': totalProduction,
+      'sales': totalSales,
+      'broken': totalBroken,
+      'large': totalLarge,
+      'revenue': totalRevenue,
+    };
+  }
+
+  List<Map<String, dynamic>> _buildPerDayAggregates(Egg egg) {
+    final Map<DateTime, Map<String, dynamic>> perDay = {};
+
+    void addTo(DateTime date, String key, num value) {
+      final d = DateTime(date.year, date.month, date.day);
+      perDay[d] ??= {
+        'date': d,
+        'production': 0,
+        'sales': 0,
+        'broken': 0,
+        'large': 0,
+        'revenue': 0.0,
+      };
+      final map = perDay[d]!;
+      if (key == 'revenue') {
+        map[key] = (map[key] as double) + value.toDouble();
+      } else {
+        map[key] = (map[key] as int) + value.toInt();
+      }
+    }
+
+    for (final p in egg.production) {
+      addTo(p.date, 'production', p.trayCount);
+    }
+    for (final s in egg.sales) {
+      addTo(s.date, 'sales', s.trayCount);
+      addTo(s.date, 'revenue', s.trayCount * s.pricePerTray);
+    }
+    for (final b in egg.brokenEggs) {
+      addTo(b.date, 'broken', b.trayCount);
+    }
+    for (final l in egg.largeEggs) {
+      addTo(l.date, 'large', l.trayCount);
+    }
+
+    final list = perDay.values.toList();
+    list.sort(
+      (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime),
+    );
+    return list;
+  }
+
+  void _showDailyDetailDialog({
+    required String title,
+    required Map<String, dynamic> details,
+  }) {
+    final production = details['production'] as int? ?? 0;
+    final sales = details['sales'] as int? ?? 0;
+    final broken = details['broken'] as int? ?? 0;
+    final large = details['large'] as int? ?? 0;
+    final revenue = details['revenue'] as double? ?? 0.0;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Yig\'ilgan tuxum: $production fletka'),
+            Text('Sotilgan tuxum: $sales fletka'),
+            Text('Siniq tuxum: $broken fletka'),
+            Text('Katta tuxum: $large fletka'),
+            const SizedBox(height: 8),
+            Text('Daromad: ${revenue.toStringAsFixed(0)} som'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Yopish'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
   }
 }
